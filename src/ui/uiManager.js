@@ -3,10 +3,13 @@
  * Handles screen transitions and UI updates
  */
 
+import { THEMES } from '../game/config.js';
+
 class UIManager {
   constructor(saveManager) {
     this.saveManager = saveManager;
     this.currentScreen = 'menu';
+    this.currentTheme = null;
     this.screens = {};
     
     // Cache screen elements
@@ -26,6 +29,62 @@ class UIManager {
       this.screens[screenName].classList.add('active');
       this.currentScreen = screenName;
     }
+  }
+
+  showMapSelection(theme) {
+    this.currentTheme = theme;
+    const themeData = THEMES[theme];
+    
+    // Update header
+    const mapTitle = document.querySelector('.map-title');
+    if (mapTitle) {
+      mapTitle.textContent = `${themeData.name} - Select Map`;
+      mapTitle.style.color = themeData.primaryColor;
+    }
+    
+    // Populate map grid
+    const mapGrid = document.querySelector('.map-grid');
+    if (!mapGrid) return;
+    
+    mapGrid.innerHTML = '';
+    
+    themeData.maps.forEach((map, index) => {
+      const mapNumber = index + 1;
+      const isUnlocked = this.saveManager.isMapUnlocked(theme, mapNumber);
+      const stars = this.saveManager.getStars(theme, map.id);
+      
+      const card = document.createElement('div');
+      card.className = 'map-card';
+      card.style.setProperty('--c', themeData.primaryColor);
+      
+      if (!isUnlocked) {
+        card.style.opacity = '0.5';
+        card.style.pointerEvents = 'none';
+      }
+      
+      card.innerHTML = `
+        <div class="map-card-icon">${index === 0 ? '🏠' : index === themeData.maps.length - 1 ? '👑' : '🎯'}</div>
+        <div class="map-card-name">${map.name}</div>
+        <div class="map-card-info">Waves: ${map.waves} | Lives: ${map.lives}</div>
+        <div class="map-stars">
+          ${[1, 2, 3, 4, 5].map(i => `<span class="${i <= stars ? 'on' : ''}">⭐</span>`).join('')}
+        </div>
+      `;
+      
+      if (isUnlocked) {
+        card.addEventListener('click', () => this.selectMap(theme, map));
+      }
+      
+      mapGrid.appendChild(card);
+    });
+    
+    this.showScreen('map');
+  }
+
+  selectMap(theme, map) {
+    console.log(`Selected map: ${map.name} (${theme})`);
+    // TODO: Start game with selected theme and map
+    this.showScreen('game');
   }
 
   updateHUD(gameState) {

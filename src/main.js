@@ -85,9 +85,7 @@ class Game {
 
   selectTheme(theme) {
     console.log(`Selected theme: ${theme}`);
-    this.uiManager.showScreen('map');
-    
-    // TODO: Populate map selection based on theme and unlocked maps
+    this.uiManager.showMapSelection(theme);
   }
 
   start() {

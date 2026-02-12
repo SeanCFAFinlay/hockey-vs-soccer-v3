@@ -158,6 +158,53 @@
       font-size: 1.4rem;
       font-weight: 700;
     }
+    .map-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+      overflow-y: auto;
+      flex: 1;
+      -webkit-overflow-scrolling: touch;
+    }
+    .map-card {
+      background: rgba(255,255,255,0.05);
+      border: 2px solid rgba(255,255,255,0.1);
+      border-radius: 16px;
+      padding: 14px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .map-card:active {
+      border-color: var(--c);
+      transform: scale(0.98);
+    }
+    .map-card-icon {
+      font-size: 2rem;
+      margin-bottom: 6px;
+    }
+    .map-card-name {
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--c);
+    }
+    .map-card-info {
+      font-size: 0.75rem;
+      color: rgba(255,255,255,0.5);
+      margin: 4px 0 8px;
+    }
+    .map-stars {
+      display: flex;
+      justify-content: center;
+      gap: 3px;
+    }
+    .map-stars span {
+      font-size: 0.8rem;
+      opacity: 0.2;
+    }
+    .map-stars span.on {
+      opacity: 1;
+    }
 
     /* Game Screen */
     #gameScreen {
