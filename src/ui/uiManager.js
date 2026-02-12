@@ -10,12 +10,17 @@ class UIManager {
     this.saveManager = saveManager;
     this.currentScreen = 'menu';
     this.currentTheme = null;
+    this.gameController = null;
     this.screens = {};
     
     // Cache screen elements
     this.screens.menu = document.getElementById('menuScreen');
     this.screens.map = document.getElementById('mapScreen');
     this.screens.game = document.getElementById('gameScreen');
+  }
+
+  setGameController(gameController) {
+    this.gameController = gameController;
   }
 
   showScreen(screenName) {
@@ -83,8 +88,12 @@ class UIManager {
 
   selectMap(theme, map) {
     console.log(`Selected map: ${map.name} (${theme})`);
-    // TODO: Start game with selected theme and map
     this.showScreen('game');
+    
+    // Start the game
+    if (this.gameController) {
+      this.gameController.startGame(theme, map);
+    }
   }
 
   updateHUD(gameState) {

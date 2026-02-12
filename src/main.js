@@ -8,6 +8,7 @@ import SaveManager from './core/saveManager.js';
 import PostProcessing from './graphics/postprocessing.js';
 import Effects from './graphics/effects.js';
 import UIManager from './ui/uiManager.js';
+import GameController from './game/gameController.js';
 
 class Game {
   constructor() {
@@ -17,6 +18,7 @@ class Game {
     this.postprocessing = null;
     this.effects = null;
     this.uiManager = null;
+    this.gameController = null;
     this.running = false;
     
     this.init();
@@ -50,6 +52,18 @@ class Game {
     
     // Initialize UI
     this.uiManager = new UIManager(this.saveManager);
+    
+    // Initialize game controller
+    this.gameController = new GameController(
+      this.engine,
+      this.postprocessing,
+      this.effects,
+      this.uiManager,
+      this.saveManager
+    );
+    
+    // Pass game controller to UI manager for map selection callback
+    this.uiManager.setGameController(this.gameController);
     
     // Setup event listeners
     this.setupEventListeners();
