@@ -58,6 +58,17 @@ html, body { width:100%; height:100%; overflow:hidden; font-family:-apple-system
 .map-stars { display:flex; justify-content:center; gap:3px; }
 .map-stars span { font-size:0.8rem; opacity:0.2; }
 .map-stars span.on { opacity:1; }
+.map-best { font-size:0.7rem; color:rgba(255,255,255,0.6); margin-top:4px; }
+.map-lock { font-size:0.7rem; color:rgba(255,255,255,0.5); margin-top:4px; }
+.map-card.locked { opacity:0.4; pointer-events:none; }
+.map-card.last-played { border-color:var(--c); box-shadow:0 0 16px color-mix(in srgb, var(--c) 35%, transparent); }
+
+.menu-settings { margin-top:24px; display:flex; flex-direction:column; gap:10px; align-items:center; }
+.setting-row { width:100%; max-width:380px; display:flex; align-items:center; justify-content:space-between; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.1); border-radius:14px; padding:10px 14px; }
+.setting-row span { font-size:0.8rem; color:rgba(255,255,255,0.6); }
+.setting-btn { background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.2); color:#fff; border-radius:10px; padding:6px 10px; font-size:0.75rem; font-weight:700; }
+.setting-btn.active { background:rgba(255,255,255,0.25); }
+.setting-speed { display:flex; gap:6px; }
 
 #gameScreen { background:#000; }
 .hud { position:absolute; top:0; left:0; right:0; z-index:100; padding:10px 12px; padding-top:calc(10px + var(--safe-top)); display:flex; justify-content:space-between; align-items:center; background:linear-gradient(to bottom, rgba(0,0,0,0.85) 0%, transparent 100%); pointer-events:none; }
@@ -157,6 +168,20 @@ html, body { width:100%; height:100%; overflow:hidden; font-family:-apple-system
       <div class="menu-card-icon">⚽</div>
       <div><h3>Soccer Stadium</h3><p>Defend on grass • Block the balls!</p></div>
       <div class="menu-card-arrow">›</div>
+    </div>
+  </div>
+  <div class="menu-settings">
+    <div class="setting-row">
+      <span>Sound</span>
+      <button class="setting-btn" id="sfxToggle">SFX: On</button>
+    </div>
+    <div class="setting-row">
+      <span>Default Speed</span>
+      <div class="setting-speed">
+        <button class="setting-btn speed-setting" data-speed="1">1×</button>
+        <button class="setting-btn speed-setting" data-speed="2">2×</button>
+        <button class="setting-btn speed-setting" data-speed="3">3×</button>
+      </div>
     </div>
   </div>
 </div>
@@ -298,6 +323,15 @@ const THEMES = {
   }
 };
 
+const SAVE_KEY = 'hvsstd_save_v1';
+const DEFAULT_SETTINGS = { gameSpeed: 1, sfx: true };
+
+let saveData = null;
+let currentMapIndex = 0;
+let resizeObserver = null;
+let listenersBound = false;
+let boundCanvas = null;
+
 let theme, themeData, mapData;
 let COLS, ROWS, PATH=[], SPAWN, BASE, WAVES=[];
 let money, lives, wave, score, gameSpeed=1;
@@ -308,31 +342,229 @@ let scene, camera, renderer, raycaster, mouse, cells=[];
 let camAngle=Math.PI/4, camHeight=14, camDist=22;
 let dragging=false, dragMoved=false, lastX=0, lastY=0, touchStart=0;
 
+// Save system helpers (localStorage persistence)
+function createDefaultThemeProgress(themeKey) {
+  return {
+    unlockedMaps: 1,
+    lastMap: 0,
+    maps: THEMES[themeKey].maps.map(() => ({ bestScore: 0, bestStars: 0 }))
+  };
+}
+
+function createDefaultSave() {
+  return {
+    version: 1,
+    settings: { ...DEFAULT_SETTINGS },
+    progress: {
+      hockey: createDefaultThemeProgress('hockey'),
+      soccer: createDefaultThemeProgress('soccer')
+    },
+    meta: {
+      lastTheme: null,
+      lastMap: 0
+    }
+  };
+}
+
+function mergeSave(base, incoming) {
+  const merged = JSON.parse(JSON.stringify(base));
+  if (!incoming || typeof incoming !== 'object') return merged;
+  merged.settings = { ...merged.settings, ...(incoming.settings || {}) };
+  merged.meta = { ...merged.meta, ...(incoming.meta || {}) };
+  ['hockey', 'soccer'].forEach(key => {
+    const savedTheme = incoming.progress && incoming.progress[key];
+    if (!savedTheme) return;
+    const maxMaps = THEMES[key].maps.length;
+    merged.progress[key].unlockedMaps = Math.min(Math.max(1, savedTheme.unlockedMaps || 1), maxMaps);
+    merged.progress[key].lastMap = Math.min(Math.max(0, savedTheme.lastMap || 0), maxMaps - 1);
+    merged.progress[key].maps = merged.progress[key].maps.map((map, idx) => {
+      const savedMap = savedTheme.maps && savedTheme.maps[idx];
+      return {
+        bestScore: Math.max(map.bestScore, savedMap ? savedMap.bestScore || 0 : 0),
+        bestStars: Math.max(map.bestStars, savedMap ? savedMap.bestStars || 0 : 0)
+      };
+    });
+  });
+  return merged;
+}
+
+function loadSaveData() {
+  const base = createDefaultSave();
+  let parsed = null;
+  try {
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (raw) parsed = JSON.parse(raw);
+  } catch (err) {
+    parsed = null;
+  }
+  saveData = mergeSave(base, parsed);
+  gameSpeed = saveData.settings.gameSpeed;
+  updateSettingsUI();
+}
+
+function persistSave() {
+  if (!saveData) return;
+  try {
+    localStorage.setItem(SAVE_KEY, JSON.stringify(saveData));
+  } catch (err) {
+    // Ignore storage failures (private mode, quota, etc.)
+  }
+}
+
+function getThemeProgress(themeKey) {
+  return saveData && saveData.progress ? saveData.progress[themeKey] : null;
+}
+
+function getMapProgress(themeKey, mapIndex) {
+  const progress = getThemeProgress(themeKey);
+  return progress && progress.maps ? progress.maps[mapIndex] : null;
+}
+
+function updateSettingsUI() {
+  const sfxToggle = document.getElementById('sfxToggle');
+  if (sfxToggle && saveData) {
+    sfxToggle.textContent = `SFX: ${saveData.settings.sfx ? 'On' : 'Off'}`;
+    sfxToggle.classList.toggle('active', saveData.settings.sfx);
+  }
+  updateSpeedButtons();
+}
+
+function updateSpeedButtons() {
+  document.querySelectorAll('.speed-btn').forEach(btn => {
+    btn.classList.toggle('active', +btn.dataset.speed === gameSpeed);
+  });
+  document.querySelectorAll('.speed-setting').forEach(btn => {
+    btn.classList.toggle('active', +btn.dataset.speed === gameSpeed);
+  });
+}
+
+function setSfxEnabled(enabled) {
+  if (!saveData) return;
+  saveData.settings.sfx = enabled;
+  updateSettingsUI();
+  persistSave();
+}
+
+function recordGameResult(isWin) {
+  if (!saveData) return;
+  const progress = getThemeProgress(theme);
+  if (!progress) return;
+  const mapProgress = getMapProgress(theme, currentMapIndex);
+  if (mapProgress) {
+    mapProgress.bestScore = Math.max(mapProgress.bestScore, score);
+    if (isWin) {
+      const maxLives = mapData.lives;
+      const stars = lives >= maxLives ? 5 : lives >= Math.ceil(maxLives * 0.7) ? 3 : 1;
+      mapProgress.bestStars = Math.max(mapProgress.bestStars, stars);
+    }
+  }
+  if (isWin) {
+    const maxMaps = THEMES[theme].maps.length;
+    progress.unlockedMaps = Math.min(Math.max(progress.unlockedMaps, currentMapIndex + 2), maxMaps);
+  }
+  persistSave();
+}
+
+// Resize helpers to keep the canvas in sync with layout changes
+function resizeRendererToDisplaySize() {
+  if (!renderer || !camera) return false;
+  const canvas = renderer.domElement;
+  const rect = canvas.getBoundingClientRect();
+  const width = Math.max(1, Math.floor(rect.width));
+  const height = Math.max(1, Math.floor(rect.height));
+  const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+  renderer.setPixelRatio(pixelRatio);
+  const needResize = canvas.width !== Math.floor(width * pixelRatio) || canvas.height !== Math.floor(height * pixelRatio);
+  if (needResize) {
+    renderer.setSize(width, height, false);
+    camera.aspect = width / height;
+    camera.updateProjectionMatrix();
+  }
+  return needResize;
+}
+
+function bindInputListeners(canvas) {
+  if (listenersBound) return;
+  canvas.addEventListener('touchstart', onTouchStart, { passive: false });
+  canvas.addEventListener('touchmove', onTouchMove, { passive: false });
+  canvas.addEventListener('touchend', onTouchEnd, { passive: false });
+  canvas.addEventListener('mousedown', onMouseDown);
+  canvas.addEventListener('mousemove', onMouseMove);
+  canvas.addEventListener('mouseup', onMouseUp);
+  canvas.addEventListener('wheel', onWheel, { passive: false });
+  canvas.addEventListener('click', onClick);
+  window.addEventListener('resize', onResize);
+  listenersBound = true;
+  boundCanvas = canvas;
+}
+
+function unbindInputListeners() {
+  if (!listenersBound || !boundCanvas) return;
+  boundCanvas.removeEventListener('touchstart', onTouchStart);
+  boundCanvas.removeEventListener('touchmove', onTouchMove);
+  boundCanvas.removeEventListener('touchend', onTouchEnd);
+  boundCanvas.removeEventListener('mousedown', onMouseDown);
+  boundCanvas.removeEventListener('mousemove', onMouseMove);
+  boundCanvas.removeEventListener('mouseup', onMouseUp);
+  boundCanvas.removeEventListener('wheel', onWheel);
+  boundCanvas.removeEventListener('click', onClick);
+  window.removeEventListener('resize', onResize);
+  listenersBound = false;
+  boundCanvas = null;
+}
+
+function setupResizeObserver() {
+  const wrap = document.querySelector('.canvas-wrap');
+  if (!wrap || !renderer) return;
+  if (resizeObserver) resizeObserver.disconnect();
+  resizeObserver = new ResizeObserver(() => resizeRendererToDisplaySize());
+  resizeObserver.observe(wrap);
+}
+
 function showScreen(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById(id).classList.add('active');
 }
 
 function selectTheme(t) {
+  if (!saveData) loadSaveData();
   theme = t;
   themeData = THEMES[t];
   document.getElementById('mapTitle').textContent = themeData.icon + ' ' + themeData.name;
   document.getElementById('mapTitle').style.color = themeData.color;
   
+  if (saveData) {
+    saveData.meta.lastTheme = t;
+    persistSave();
+  }
+
+  const progress = getThemeProgress(t);
+  const unlocked = progress ? progress.unlockedMaps : 1;
+  const lastPlayed = progress ? progress.lastMap : null;
   const grid = document.getElementById('mapGrid');
   grid.innerHTML = '';
   themeData.maps.forEach((m, i) => {
+    const mapProgress = getMapProgress(t, i);
+    const stars = mapProgress ? mapProgress.bestStars : 0;
+    const bestScore = mapProgress ? mapProgress.bestScore : 0;
+    const locked = i >= unlocked;
     const card = document.createElement('div');
     card.className = 'map-card';
+    card.classList.toggle('locked', locked);
+    card.classList.toggle('last-played', lastPlayed === i);
     card.style.setProperty('--c', themeData.color);
-    card.innerHTML = `<div class="map-card-icon">${themeData.icon}</div><div class="map-card-name">${m.name}</div><div class="map-card-info">${m.waves} Waves • ${m.cols}×${m.rows}</div><div class="map-stars">${[1,2,3,4,5].map(n=>`<span class="${n<=m.diff?'on':''}">⭐</span>`).join('')}</div>`;
-    card.onclick = () => startGame(i);
+    card.innerHTML = `<div class="map-card-icon">${themeData.icon}</div><div class="map-card-name">${m.name}</div><div class="map-card-info">${m.waves} Waves • ${m.cols}×${m.rows}</div><div class="map-stars">${[1,2,3,4,5].map(n=>`<span class="${n<=stars?'on':''}">⭐</span>`).join('')}</div>${bestScore ? `<div class="map-best">Best ${bestScore}</div>` : ''}${locked ? '<div class="map-lock">🔒 Locked</div>' : ''}`;
+    if (!locked) {
+      card.onclick = () => startGame(i);
+    }
     grid.appendChild(card);
   });
   showScreen('mapScreen');
 }
 
 function startGame(idx) {
+  if (!saveData) loadSaveData();
+  currentMapIndex = idx;
   mapData = themeData.maps[idx];
   COLS = mapData.cols;
   ROWS = mapData.rows;
@@ -340,7 +572,7 @@ function startGame(idx) {
   lives = mapData.lives;
   wave = 0;
   score = 0;
-  gameSpeed = 1;
+  gameSpeed = saveData ? saveData.settings.gameSpeed : 1;
   grid = [];
   towers = [];
   enemies = [];
@@ -355,18 +587,33 @@ function startGame(idx) {
   WAVES = generateWaves(mapData.waves);
   
   showScreen('gameScreen');
-  setTimeout(() => {
-    init3D();
-    renderTowers();
-    updateHUD();
-    running = true;
-    lastTime = performance.now();
-    gameLoop(lastTime);
-  }, 100);
+  if (saveData) {
+    saveData.meta.lastTheme = theme;
+    saveData.meta.lastMap = idx;
+    if (saveData.progress && saveData.progress[theme]) {
+      saveData.progress[theme].lastMap = idx;
+    }
+    persistSave();
+  }
+  updateSpeedButtons();
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      init3D();
+      resizeRendererToDisplaySize();
+      renderTowers();
+      updateHUD();
+      running = true;
+      lastTime = performance.now();
+      gameLoop(lastTime);
+    });
+  });
 }
 
 function exitGame() {
   running = false;
+  persistSave();
+  unbindInputListeners();
+  if (resizeObserver) resizeObserver.disconnect();
   selectTheme(theme);
 }
 
@@ -417,7 +664,9 @@ function init3D() {
   const canvas = document.getElementById('gameCanvas');
   if (renderer) renderer.dispose();
   
-  const w = wrap.clientWidth, h = wrap.clientHeight;
+  const rect = wrap.getBoundingClientRect();
+  const w = Math.max(1, rect.width);
+  const h = Math.max(1, rect.height);
   scene = new THREE.Scene();
   scene.background = new THREE.Color(themeData.envColor);
   scene.fog = new THREE.Fog(themeData.envColor, 35, 70);
@@ -428,17 +677,27 @@ function init3D() {
   updateCamera();
   
   renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-  renderer.setSize(w, h);
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.outputEncoding = THREE.sRGBEncoding;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = theme === 'hockey' ? 1.05 : 1.1;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   
-  scene.add(new THREE.AmbientLight(0xaabbcc, 0.6));
-  const sun = new THREE.DirectionalLight(0xffffff, 1.2);
+  resizeRendererToDisplaySize();
+
+  const ambientIntensity = theme === 'hockey' ? 0.5 : 0.65;
+  const ambientColor = theme === 'hockey' ? 0xcfe7ff : 0xdff8e0;
+  scene.add(new THREE.AmbientLight(ambientColor, ambientIntensity));
+  const hemi = new THREE.HemisphereLight(0xffffff, themeData.groundColor, theme === 'hockey' ? 0.3 : 0.35);
+  scene.add(hemi);
+
+  const sunColor = theme === 'hockey' ? 0xf2f8ff : 0xfff3d6;
+  const sun = new THREE.DirectionalLight(sunColor, theme === 'hockey' ? 1.15 : 1.05);
   sun.position.set(COLS*0.4, 25, ROWS*0.4);
   sun.castShadow = true;
-  sun.shadow.mapSize.width = 2048;
-  sun.shadow.mapSize.height = 2048;
+  const shadowSize = window.matchMedia('(max-width: 768px)').matches ? 1024 : 2048;
+  sun.shadow.mapSize.width = shadowSize;
+  sun.shadow.mapSize.height = shadowSize;
   sun.shadow.camera.near = 1;
   sun.shadow.camera.far = 60;
   sun.shadow.camera.left = -COLS;
@@ -457,16 +716,9 @@ function init3D() {
   
   if (theme === 'hockey') buildHockeyRink();
   else buildSoccerPitch();
-  
-  canvas.addEventListener('touchstart', onTouchStart, { passive: false });
-  canvas.addEventListener('touchmove', onTouchMove, { passive: false });
-  canvas.addEventListener('touchend', onTouchEnd, { passive: false });
-  canvas.addEventListener('mousedown', onMouseDown);
-  canvas.addEventListener('mousemove', onMouseMove);
-  canvas.addEventListener('mouseup', onMouseUp);
-  canvas.addEventListener('wheel', onWheel, { passive: false });
-  canvas.addEventListener('click', onClick);
-  window.addEventListener('resize', onResize);
+
+  bindInputListeners(canvas);
+  setupResizeObserver();
 }
 
 function buildHockeyRink() {
@@ -486,8 +738,9 @@ function buildHockeyRink() {
     scene.add(board);
   });
   
-  const redMat = new THREE.MeshBasicMaterial({ color: 0xcc0000 });
-  const blueMat = new THREE.MeshBasicMaterial({ color: 0x0055cc });
+  const lineOffset = { polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 };
+  const redMat = new THREE.MeshBasicMaterial({ color: 0xcc0000, ...lineOffset });
+  const blueMat = new THREE.MeshBasicMaterial({ color: 0x0055cc, ...lineOffset });
   
   const centerLine = new THREE.Mesh(new THREE.PlaneGeometry(0.18, ROWS), redMat);
   centerLine.rotation.x = -Math.PI/2;
@@ -550,7 +803,7 @@ function buildSoccerPitch() {
     scene.add(stripe);
   }
   
-  const lineMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  const lineMat = new THREE.MeshBasicMaterial({ color: 0xffffff, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
   [[0, -hh, COLS, 0.1], [0, hh, COLS, 0.1]].forEach(([x,z,w,d]) => {
     const line = new THREE.Mesh(new THREE.PlaneGeometry(w, d), lineMat);
     line.rotation.x = -Math.PI/2;
@@ -666,6 +919,10 @@ function buildStands(hw, hh) {
   const standMat = new THREE.MeshLambertMaterial({ color: 0x444444 });
   const standHeight = 1.0;
   const standDepth = 2.0;
+  const fanGeo = new THREE.SphereGeometry(0.1, 8, 8);
+  const fanMat = new THREE.MeshLambertMaterial({ vertexColors: true });
+  const fanColors = [0xff5555, 0xffff55, 0x55ff55, 0x5555ff, 0xff55ff, 0x55ffff];
+  const fanDummy = new THREE.Object3D();
   // top and bottom stands
   const topBottomDepth = standDepth;
   const standWidth = COLS + 4;
@@ -676,21 +933,21 @@ function buildStands(hw, hh) {
     stand.receiveShadow = true;
     stand.castShadow = true;
     scene.add(stand);
-    // Fans: small spheres with random colors
-    const fanGeo = new THREE.SphereGeometry(0.1, 8, 8);
-    const colors = [0xff5555, 0xffff55, 0x55ff55, 0x5555ff, 0xff55ff, 0x55ffff];
     const fanCount = Math.max(20, Math.floor(COLS * 2));
+    const fans = new THREE.InstancedMesh(fanGeo, fanMat, fanCount);
     for (let i = 0; i < fanCount; i++) {
-      const color = colors[Math.floor(Math.random() * colors.length)];
-      const mat = new THREE.MeshLambertMaterial({ color });
-      const fan = new THREE.Mesh(fanGeo, mat);
       const offsetX = (i / fanCount - 0.5) * (standWidth * 0.9);
       const offsetZ = z + (Math.random() * topBottomDepth - topBottomDepth / 2);
-      fan.position.set(offsetX, standHeight + 0.05 + Math.random() * 0.1, offsetZ);
-      fan.castShadow = false;
-      fan.receiveShadow = false;
-      scene.add(fan);
+      fanDummy.position.set(offsetX, standHeight + 0.05 + Math.random() * 0.1, offsetZ);
+      fanDummy.updateMatrix();
+      fans.setMatrixAt(i, fanDummy.matrix);
+      fans.setColorAt(i, new THREE.Color(fanColors[Math.floor(Math.random() * fanColors.length)]));
     }
+    fans.castShadow = false;
+    fans.receiveShadow = false;
+    fans.instanceMatrix.needsUpdate = true;
+    if (fans.instanceColor) fans.instanceColor.needsUpdate = true;
+    scene.add(fans);
   });
   // left and right stands
   const sideWidth = ROWS + 4;
@@ -701,20 +958,21 @@ function buildStands(hw, hh) {
     stand.receiveShadow = true;
     stand.castShadow = true;
     scene.add(stand);
-    const fanGeo = new THREE.SphereGeometry(0.1, 8, 8);
-    const colors = [0xff5555, 0xffff55, 0x55ff55, 0x5555ff, 0xff55ff, 0x55ffff];
     const fanCount = Math.max(20, Math.floor(ROWS * 2));
+    const fans = new THREE.InstancedMesh(fanGeo, fanMat, fanCount);
     for (let i = 0; i < fanCount; i++) {
-      const color = colors[Math.floor(Math.random() * colors.length)];
-      const mat = new THREE.MeshLambertMaterial({ color });
-      const fan = new THREE.Mesh(fanGeo, mat);
       const offsetZ = (i / fanCount - 0.5) * (sideWidth * 0.9);
       const offsetX = x + (Math.random() * standDepth - standDepth / 2);
-      fan.position.set(offsetX, standHeight + 0.05 + Math.random() * 0.1, offsetZ);
-      fan.castShadow = false;
-      fan.receiveShadow = false;
-      scene.add(fan);
+      fanDummy.position.set(offsetX, standHeight + 0.05 + Math.random() * 0.1, offsetZ);
+      fanDummy.updateMatrix();
+      fans.setMatrixAt(i, fanDummy.matrix);
+      fans.setColorAt(i, new THREE.Color(fanColors[Math.floor(Math.random() * fanColors.length)]));
     }
+    fans.castShadow = false;
+    fans.receiveShadow = false;
+    fans.instanceMatrix.needsUpdate = true;
+    if (fans.instanceColor) fans.instanceColor.needsUpdate = true;
+    scene.add(fans);
   });
 }
 
@@ -2031,6 +2289,7 @@ function spawnEnemy(ed) {
 function gameLoop(t) {
   if (!running) return;
   
+  resizeRendererToDisplaySize();
   const dt = Math.min((t - lastTime) / 1000, 0.1) * gameSpeed;
   lastTime = t;
   animTime += dt;
@@ -2046,11 +2305,15 @@ function gameLoop(t) {
   if (waveActive && enemies.length === 0 && projectiles.length === 0) {
     waveActive = false;
     updateHUD();
+    const mapProgress = getMapProgress(theme, currentMapIndex);
+    if (mapProgress) mapProgress.bestScore = Math.max(mapProgress.bestScore, score);
+    persistSave();
     
     if (wave >= mapData.waves) {
       document.getElementById('winScore').textContent = score;
       document.getElementById('winWaves').textContent = wave;
       document.getElementById('winModal').classList.add('show');
+      recordGameResult(true);
       running = false;
       return;
     }
@@ -2092,6 +2355,7 @@ function updateEnemies(dt) {
         document.getElementById('loseWave').textContent = wave;
         document.getElementById('loseScore').textContent = score;
         document.getElementById('loseModal').classList.add('show');
+        recordGameResult(false);
         running = false;
         waveActive = false;
       }
@@ -2283,24 +2547,54 @@ function updateParticles(dt) {
 }
 
 function onResize() {
-  const wrap = document.querySelector('.canvas-wrap');
-  if (!wrap || !camera || !renderer) return;
-  camera.aspect = wrap.clientWidth / wrap.clientHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(wrap.clientWidth, wrap.clientHeight);
+  resizeRendererToDisplaySize();
 }
 
 function closeModal(type) {
   document.getElementById(type + 'Modal').classList.remove('show');
+  unbindInputListeners();
+  if (resizeObserver) resizeObserver.disconnect();
   selectTheme(theme);
 }
 
 document.querySelectorAll('.speed-btn').forEach(btn => {
   btn.onclick = () => {
     gameSpeed = +btn.dataset.speed;
-    document.querySelectorAll('.speed-btn').forEach(b => b.classList.toggle('active', +b.dataset.speed === gameSpeed));
+    if (saveData) {
+      saveData.settings.gameSpeed = gameSpeed;
+      persistSave();
+    }
+    updateSpeedButtons();
   };
 });
+
+document.querySelectorAll('.speed-setting').forEach(btn => {
+  btn.onclick = () => {
+    gameSpeed = +btn.dataset.speed;
+    if (saveData) {
+      saveData.settings.gameSpeed = gameSpeed;
+      persistSave();
+    }
+    updateSpeedButtons();
+  };
+});
+
+const sfxToggle = document.getElementById('sfxToggle');
+if (sfxToggle) {
+  sfxToggle.onclick = () => {
+    if (!saveData) loadSaveData();
+    setSfxEnabled(!saveData.settings.sfx);
+  };
+}
+
+window.addEventListener('beforeunload', () => {
+  persistSave();
+});
+
+loadSaveData();
+if (saveData && saveData.meta.lastTheme) {
+  selectTheme(saveData.meta.lastTheme);
+}
 </script>
 </body>
 </html>
