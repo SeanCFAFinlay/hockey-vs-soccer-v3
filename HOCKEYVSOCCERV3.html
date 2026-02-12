@@ -430,10 +430,7 @@ function updateSettingsUI() {
 }
 
 function updateSpeedButtons() {
-  document.querySelectorAll('.speed-btn').forEach(btn => {
-    btn.classList.toggle('active', +btn.dataset.speed === gameSpeed);
-  });
-  document.querySelectorAll('.speed-setting').forEach(btn => {
+  document.querySelectorAll('.speed-btn, .speed-setting').forEach(btn => {
     btn.classList.toggle('active', +btn.dataset.speed === gameSpeed);
   });
 }
@@ -548,12 +545,15 @@ function selectTheme(t) {
     const stars = mapProgress ? mapProgress.bestStars : 0;
     const bestScore = mapProgress ? mapProgress.bestScore : 0;
     const locked = i >= unlocked;
+    const starsHtml = [1,2,3,4,5].map(n => `<span class="${n<=stars?'on':''}">⭐</span>`).join('');
+    const bestHtml = bestScore ? `<div class="map-best">Best ${bestScore}</div>` : '';
+    const lockHtml = locked ? '<div class="map-lock">🔒 Locked</div>' : '';
     const card = document.createElement('div');
     card.className = 'map-card';
     card.classList.toggle('locked', locked);
     card.classList.toggle('last-played', lastPlayed === i);
     card.style.setProperty('--c', themeData.color);
-    card.innerHTML = `<div class="map-card-icon">${themeData.icon}</div><div class="map-card-name">${m.name}</div><div class="map-card-info">${m.waves} Waves • ${m.cols}×${m.rows}</div><div class="map-stars">${[1,2,3,4,5].map(n=>`<span class="${n<=stars?'on':''}">⭐</span>`).join('')}</div>${bestScore ? `<div class="map-best">Best ${bestScore}</div>` : ''}${locked ? '<div class="map-lock">🔒 Locked</div>' : ''}`;
+    card.innerHTML = `<div class="map-card-icon">${themeData.icon}</div><div class="map-card-name">${m.name}</div><div class="map-card-info">${m.waves} Waves • ${m.cols}×${m.rows}</div><div class="map-stars">${starsHtml}</div>${bestHtml}${lockHtml}`;
     if (!locked) {
       card.onclick = () => startGame(i);
     }
@@ -2589,6 +2589,14 @@ if (sfxToggle) {
 
 window.addEventListener('beforeunload', () => {
   persistSave();
+});
+
+window.addEventListener('pagehide', () => {
+  persistSave();
+});
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') persistSave();
 });
 
 loadSaveData();
