@@ -187,7 +187,7 @@ export const HOCKEY_MAPS = [
   { id: 'map6', name: 'Frozen Lake', cols: 28, rows: 16, waves: 45, startMoney: 1200, lives: 8, difficulty: 6 },
   { id: 'map7', name: 'Winter Classic', cols: 30, rows: 17, waves: 50, startMoney: 1300, lives: 7, difficulty: 7 },
   { id: 'map8', name: 'World Championships', cols: 32, rows: 18, waves: 55, startMoney: 1400, lives: 6, difficulty: 8 },
-  { id: 'map9', name: 'All‑Star Arena', cols: 34, rows: 19, waves: 60, startMoney: 1500, lives: 5, difficulty: 9 },
+  { id: 'map9', name: 'All-Star Arena', cols: 34, rows: 19, waves: 60, startMoney: 1500, lives: 5, difficulty: 9 },
   { id: 'map10', name: 'Hall of Fame', cols: 36, rows: 20, waves: 65, startMoney: 1600, lives: 4, difficulty: 10 }
 ];
 

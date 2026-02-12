@@ -23,6 +23,9 @@ class GameController {
     
     this.raycaster = new THREE.Raycaster();
     this.mouse = new THREE.Vector2();
+    
+    // Constants
+    this.MAX_DELTA_TIME = 0.1; // Cap delta time at 100ms
   }
 
   startGame(themeName, mapData) {
@@ -126,7 +129,7 @@ class GameController {
     requestAnimationFrame(() => this.gameLoop());
     
     const currentTime = performance.now();
-    const deltaTime = Math.min((currentTime - this.lastTime) / 1000, 0.1) * this.gameState.gameSpeed;
+    const deltaTime = Math.min((currentTime - this.lastTime) / 1000, this.MAX_DELTA_TIME) * this.gameState.gameSpeed;
     this.lastTime = currentTime;
     
     // Update game systems

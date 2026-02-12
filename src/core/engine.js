@@ -14,6 +14,9 @@ class Engine {
     this.raycaster = new THREE.Raycaster();
     this.mouse = new THREE.Vector2();
     
+    // Bind resize handler to preserve 'this' context
+    this.onResize = this.onResize.bind(this);
+    
     this.init();
   }
 
@@ -48,7 +51,7 @@ class Engine {
     this.setupLights();
     
     // Handle window resize
-    window.addEventListener('resize', () => this.onResize());
+    window.addEventListener('resize', this.onResize);
   }
 
   setupLights() {

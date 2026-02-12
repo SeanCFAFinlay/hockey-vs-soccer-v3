@@ -183,7 +183,7 @@ class Effects {
     // Clear all flashes
     this.flashes.forEach(f => {
       this.scene.remove(f.light);
-      f.light.dispose();
+      // Note: PointLight doesn't have a dispose() method
     });
     this.flashes = [];
   }
