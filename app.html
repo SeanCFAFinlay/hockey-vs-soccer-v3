@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>🏒 Hockey vs Soccer ⚽ TD – V3</title>
+  <style>
+    :root {
+      --safe-top: env(safe-area-inset-top);
+      --safe-bottom: env(safe-area-inset-bottom);
+      --ice: #00d4ff;
+      --grass: #22c55e;
+      --gold: #ffd700;
+      --red: #ef4444;
+      --bg: #0a0c12;
+    }
+    * { 
+      margin: 0; 
+      padding: 0; 
+      box-sizing: border-box; 
+      -webkit-tap-highlight-color: transparent;
+      -webkit-touch-callout: none;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+    html, body { 
+      width: 100%; 
+      height: 100%; 
+      overflow: hidden; 
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg);
+      color: #fff;
+      position: fixed;
+      touch-action: none;
+    }
+
+    /* Screen Management */
+    .screen { 
+      display: none; 
+      height: 100%; 
+    }
+    .screen.active { 
+      display: flex; 
+      flex-direction: column; 
+    }
+
+    /* Menu Screen */
+    #menuScreen {
+      background: linear-gradient(135deg, #0a0a1a 0%, #1a1a2e 100%);
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+      padding-top: calc(20px + var(--safe-top));
+    }
+    .logo {
+      text-align: center;
+      margin-bottom: 40px;
+    }
+    .logo-icons {
+      font-size: 3.5rem;
+      margin-bottom: 10px;
+    }
+    .logo h1 {
+      font-size: 1.8rem;
+      font-weight: 800;
+    }
+    .logo h1 .ice { color: var(--ice); }
+    .logo h1 .grass { color: var(--grass); }
+    .logo p {
+      color: rgba(255,255,255,0.4);
+      font-size: 0.9rem;
+      letter-spacing: 4px;
+      margin-top: 8px;
+    }
+    .menu-cards {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      width: 100%;
+      max-width: 380px;
+    }
+    .menu-card {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 22px;
+      background: rgba(255,255,255,0.05);
+      border: 2px solid rgba(255,255,255,0.1);
+      border-radius: 20px;
+      transition: all .2s;
+      cursor: pointer;
+    }
+    .menu-card:active {
+      transform: scale(0.98);
+    }
+    .menu-card.hockey {
+      border-color: rgba(0,212,255,0.3);
+    }
+    .menu-card.hockey:active {
+      border-color: var(--ice);
+      box-shadow: 0 0 30px rgba(0,212,255,0.3);
+    }
+    .menu-card.soccer {
+      border-color: rgba(34,197,94,0.3);
+    }
+    .menu-card.soccer:active {
+      border-color: var(--grass);
+      box-shadow: 0 0 30px rgba(34,197,94,0.3);
+    }
+    .menu-card-icon {
+      font-size: 3rem;
+    }
+    .menu-card-content {
+      flex: 1;
+    }
+    .menu-card h3 {
+      font-size: 1.3rem;
+      font-weight: 700;
+    }
+    .menu-card.hockey h3 { color: var(--ice); }
+    .menu-card.soccer h3 { color: var(--grass); }
+    .menu-card p {
+      font-size: 0.85rem;
+      color: rgba(255,255,255,0.5);
+      margin-top: 4px;
+    }
+    .menu-card-arrow {
+      font-size: 1.5rem;
+      opacity: 0.3;
+    }
+
+    /* Map Screen */
+    #mapScreen {
+      background: linear-gradient(135deg, #0a0a1a 0%, #1a1a2e 100%);
+      padding: 16px;
+      padding-top: calc(16px + var(--safe-top));
+      padding-bottom: calc(16px + var(--safe-bottom));
+    }
+    .map-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    .back-btn {
+      width: 44px;
+      height: 44px;
+      background: rgba(255,255,255,0.1);
+      border: none;
+      border-radius: 12px;
+      color: #fff;
+      font-size: 1.3rem;
+      cursor: pointer;
+    }
+    .map-title {
+      font-size: 1.4rem;
+      font-weight: 700;
+    }
+    .map-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+      overflow-y: auto;
+      flex: 1;
+      -webkit-overflow-scrolling: touch;
+    }
+    .map-card {
+      background: rgba(255,255,255,0.05);
+      border: 2px solid rgba(255,255,255,0.1);
+      border-radius: 16px;
+      padding: 14px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .map-card:active {
+      border-color: var(--c);
+      transform: scale(0.98);
+    }
+    .map-card-icon {
+      font-size: 2rem;
+      margin-bottom: 6px;
+    }
+    .map-card-name {
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--c);
+    }
+    .map-card-info {
+      font-size: 0.75rem;
+      color: rgba(255,255,255,0.5);
+      margin: 4px 0 8px;
+    }
+    .map-stars {
+      display: flex;
+      justify-content: center;
+      gap: 3px;
+    }
+    .map-stars span {
+      font-size: 0.8rem;
+      opacity: 0.2;
+    }
+    .map-stars span.on {
+      opacity: 1;
+    }
+
+    /* Game Screen */
+    #gameScreen {
+      background: #000;
+    }
+    #game-container {
+      position: relative;
+      width: 100%;
+      height: 100%;
+    }
+    .hud {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 100;
+      padding: 10px 12px;
+      padding-top: calc(10px + var(--safe-top));
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: linear-gradient(to bottom, rgba(0,0,0,0.85) 0%, transparent 100%);
+      pointer-events: none;
+    }
+    .hud > * {
+      pointer-events: auto;
+    }
+    .hud-wave {
+      background: rgba(0,0,0,0.7);
+      padding: 8px 14px;
+      border-radius: 20px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      border: 1px solid rgba(255,255,255,0.15);
+      backdrop-filter: blur(10px);
+    }
+    .hud-right {
+      display: flex;
+      gap: 8px;
+    }
+    .hud-stat {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      background: rgba(0,0,0,0.7);
+      padding: 8px 12px;
+      border-radius: 20px;
+      font-size: 0.85rem;
+      font-weight: 700;
+      border: 1px solid rgba(255,255,255,0.15);
+      backdrop-filter: blur(10px);
+    }
+    .hud-stat.money { color: var(--gold); }
+    .hud-stat.lives { color: var(--red); }
+    .hud-stat.score { color: var(--grass); }
+  </style>
+</head>
+<body>
+  <!-- Menu Screen -->
+  <div id="menuScreen" class="screen active">
+    <div class="logo">
+      <div class="logo-icons">🏒⚽</div>
+      <h1>
+        <span class="ice">HOCKEY</span>
+        vs
+        <span class="grass">SOCCER</span>
+      </h1>
+      <p>TOWER DEFENSE</p>
+    </div>
+    <div class="menu-cards">
+      <div class="menu-card hockey">
+        <div class="menu-card-icon">🏒</div>
+        <div class="menu-card-content">
+          <h3>Hockey Mode</h3>
+          <p>Defend the ice rink</p>
+        </div>
+        <div class="menu-card-arrow">→</div>
+      </div>
+      <div class="menu-card soccer">
+        <div class="menu-card-icon">⚽</div>
+        <div class="menu-card-content">
+          <h3>Soccer Mode</h3>
+          <p>Protect the pitch</p>
+        </div>
+        <div class="menu-card-arrow">→</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Map Selection Screen -->
+  <div id="mapScreen" class="screen">
+    <div class="map-header">
+      <button class="back-btn">←</button>
+      <div class="map-title">Select Map</div>
+    </div>
+    <div class="map-grid">
+      <!-- Maps will be populated dynamically -->
+    </div>
+  </div>
+
+  <!-- Game Screen -->
+  <div id="gameScreen" class="screen">
+    <div id="game-container">
+      <!-- Three.js canvas will be inserted here -->
+      <div class="hud">
+        <div class="hud-wave">Wave 1</div>
+        <div class="hud-right">
+          <div class="hud-stat money">💰 100</div>
+          <div class="hud-stat lives">❤️ 20</div>
+          <div class="hud-stat score">⭐ 0</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
