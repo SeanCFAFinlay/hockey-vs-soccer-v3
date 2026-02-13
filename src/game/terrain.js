@@ -52,8 +52,8 @@ class Terrain {
 
   create3DTerrain() {
     const { cols, rows } = this.mapData;
-    const hw = (cols * this.cellSize) / 2;
-    const hh = (rows * this.cellSize) / 2;
+    const _hw = (cols * this.cellSize) / 2; // Half-width (reserved for future use)
+    const _hh = (rows * this.cellSize) / 2; // Half-height (reserved for future use)
     
     // Ground plane
     const groundGeometry = new THREE.PlaneGeometry(

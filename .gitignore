@@ -1,5 +1,4 @@
-﻿<<<<<<< HEAD
-# Dependencies
+﻿# Dependencies
 node_modules/
 yarn.lock
 pnpm-lock.yaml
@@ -28,14 +27,5 @@ Thumbs.db
 # Logs
 *.log
 npm-debug.log*
-=======
-ï»¿node_modules
-dist
-.vite
-.DS_Store
-.env
-.env.local
-npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
->>>>>>> 7f94a24 (Add legacy V5 reference and gitignore)
