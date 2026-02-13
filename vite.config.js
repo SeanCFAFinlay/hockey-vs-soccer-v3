@@ -10,5 +10,6 @@ export default defineConfig({
         app: resolve(__dirname, 'app.html'),
       },
     },
+    chunkSizeWarningLimit: 600, // Three.js is large, increase limit to 600kb
   },
 })
