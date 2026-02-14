@@ -165,6 +165,23 @@ Users can manually select:
 - **High**: Full effects (desktop)
 - **Medium**: Balanced (modern mobile)
 - **Low**: Performance mode (older devices)
+- **Ultra**: Max lighting, shadows, and postprocessing (desktop GPUs)
+
+### Graphics Settings Menu
+
+The in-game **Graphics Settings** panel (menu screen) controls:
+- Resolution scale (auto, 0.75×–1.5×)
+- Shadow quality (Low/Medium/High/Ultra)
+- Post-processing toggle (Auto/On/Off)
+- Texture quality (anisotropy + material detail)
+- Particle density scaling
+
+### Asset Pipeline Guidelines
+
+- **Texture sizes**: Power-of-two (512, 1024, 2048). Avoid >2048 for mobile.
+- **Compression**: Use WebP/JPEG for albedo, PNG for UI/alpha. Keep normal maps in linear color space.
+- **Naming**: `{theme}_{asset}_{type}_{size}` (e.g. `hockey_rink_albedo_1024`).
+- **Placement**: Add source textures under `content/` and optimized runtime assets under `assets/`.
 
 ---
 

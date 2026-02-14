@@ -9,12 +9,13 @@ import GameState from './gameState.js';
 import { THEMES } from './config.js';
 
 class GameController {
-  constructor(engine, postprocessing, effects, uiManager, saveManager) {
+  constructor(engine, postprocessing, effects, uiManager, saveManager, qualityManager) {
     this.engine = engine;
     this.postprocessing = postprocessing;
     this.effects = effects;
     this.uiManager = uiManager;
     this.saveManager = saveManager;
+    this.qualityManager = qualityManager;
     
     this.terrain = null;
     this.gameState = null;
@@ -45,7 +46,8 @@ class GameController {
     this.gameState = new GameState(theme, mapData);
     
     // Create terrain
-    this.terrain = new Terrain(this.engine.scene, theme, mapData);
+    const qualitySettings = this.qualityManager ? this.qualityManager.getSettings() : {};
+    this.terrain = new Terrain(this.engine.scene, theme, mapData, qualitySettings);
     
     // Setup camera position based on map size
     const camDist = Math.max(mapData.cols, mapData.rows) * 1.2;
@@ -160,6 +162,12 @@ class GameController {
     } else if (this.gameState.isWaveComplete()) {
       this.gameState.endWave();
       console.log(`Wave ${this.gameState.wave} complete!`);
+    }
+  }
+
+  applyQualitySettings(settings) {
+    if (this.terrain) {
+      this.terrain.applyMaterialQuality(settings);
     }
   }
 

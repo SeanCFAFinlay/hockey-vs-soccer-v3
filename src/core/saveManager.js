@@ -11,6 +11,13 @@ class SaveManager {
       version: 1,
       settings: {
         graphics: 'auto',
+        graphicsOptions: {
+          resolutionScale: 'auto',
+          shadowQuality: 'auto',
+          postprocessing: 'auto',
+          textureQuality: 'auto',
+          particleDensity: 'auto'
+        },
         sound: true
       },
       progress: {
@@ -49,6 +56,8 @@ class SaveManager {
         if (this.data.version < this.currentVersion) {
           this.migrate();
         }
+
+        this.ensureSettingsDefaults();
         
         console.log('Save data loaded successfully');
       } else {
@@ -81,6 +90,24 @@ class SaveManager {
     console.log('Migrating save data from version', this.data.version, 'to', this.currentVersion);
     this.data.version = this.currentVersion;
     this.save();
+  }
+
+  ensureSettingsDefaults() {
+    if (!this.data.settings) {
+      this.data.settings = {};
+    }
+    
+    const defaultSettings = this.defaultSave.settings;
+    const existingGraphics = this.data.settings.graphicsOptions || {};
+    
+    this.data.settings = {
+      ...defaultSettings,
+      ...this.data.settings,
+      graphicsOptions: {
+        ...defaultSettings.graphicsOptions,
+        ...existingGraphics
+      }
+    };
   }
 
   // Settings methods

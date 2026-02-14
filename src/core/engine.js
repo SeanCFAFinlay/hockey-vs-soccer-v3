@@ -11,6 +11,10 @@ class Engine {
     this.scene = null;
     this.camera = null;
     this.renderer = null;
+    this.hemiLight = null;
+    this.dirLight = null;
+    this.rimLight = null;
+    this.appliedSettings = null;
     this.raycaster = new THREE.Raycaster();
     this.mouse = new THREE.Vector2();
     
@@ -43,6 +47,7 @@ class Engine {
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     
     // Append to container
     this.container.appendChild(this.renderer.domElement);
@@ -56,31 +61,93 @@ class Engine {
 
   setupLights() {
     // Hemisphere light for ambient outdoor feel
-    const hemiLight = new THREE.HemisphereLight(0x87ceeb, 0x222222, 0.6);
-    this.scene.add(hemiLight);
+    this.hemiLight = new THREE.HemisphereLight(0x87ceeb, 0x222222, 0.6);
+    this.scene.add(this.hemiLight);
     
     // Main directional light with optimized shadows
-    const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
-    dirLight.position.set(10, 20, 10);
-    dirLight.castShadow = true;
+    this.dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
+    this.dirLight.position.set(10, 20, 10);
+    this.dirLight.castShadow = true;
     
     // Shadow camera setup
-    dirLight.shadow.camera.left = -25;
-    dirLight.shadow.camera.right = 25;
-    dirLight.shadow.camera.top = 25;
-    dirLight.shadow.camera.bottom = -25;
-    dirLight.shadow.camera.near = 0.5;
-    dirLight.shadow.camera.far = 50;
-    dirLight.shadow.mapSize.width = 2048;
-    dirLight.shadow.mapSize.height = 2048;
-    dirLight.shadow.bias = -0.0001;
+    this.dirLight.shadow.camera.left = -25;
+    this.dirLight.shadow.camera.right = 25;
+    this.dirLight.shadow.camera.top = 25;
+    this.dirLight.shadow.camera.bottom = -25;
+    this.dirLight.shadow.camera.near = 0.5;
+    this.dirLight.shadow.camera.far = 50;
+    this.dirLight.shadow.mapSize.width = 2048;
+    this.dirLight.shadow.mapSize.height = 2048;
+    this.dirLight.shadow.bias = -0.0001;
     
-    this.scene.add(dirLight);
+    this.scene.add(this.dirLight);
     
     // Rim light for depth
-    const rimLight = new THREE.DirectionalLight(0x4488ff, 0.3);
-    rimLight.position.set(-10, 5, -10);
-    this.scene.add(rimLight);
+    this.rimLight = new THREE.DirectionalLight(0x4488ff, 0.3);
+    this.rimLight.position.set(-10, 5, -10);
+    this.scene.add(this.rimLight);
+  }
+
+  applyQualitySettings(settings) {
+    if (!settings) return;
+    
+    const basePixelRatio = Math.min(window.devicePixelRatio, settings.pixelRatio);
+    const pixelRatio = Math.min(basePixelRatio * settings.resolutionScale, settings.pixelRatio);
+    let resized = false;
+    
+    if (!this.appliedSettings || this.appliedSettings.pixelRatio !== pixelRatio) {
+      this.renderer.setPixelRatio(pixelRatio);
+      this.renderer.setSize(window.innerWidth, window.innerHeight);
+      resized = true;
+    }
+    
+    if (!this.appliedSettings || this.appliedSettings.toneMappingExposure !== settings.toneMappingExposure) {
+      this.renderer.toneMappingExposure = settings.toneMappingExposure;
+    }
+    
+    if (this.dirLight) {
+      if (!this.appliedSettings || this.appliedSettings.shadowMapSize !== settings.shadowMapSize) {
+        this.dirLight.shadow.mapSize.set(settings.shadowMapSize, settings.shadowMapSize);
+        this.dirLight.shadow.needsUpdate = true;
+      }
+      
+      if (!this.appliedSettings || this.appliedSettings.shadowSoftness !== settings.shadowSoftness) {
+        this.dirLight.shadow.radius = settings.shadowSoftness;
+      }
+    }
+
+    if (!this.appliedSettings || this.appliedSettings.textureAnisotropy !== settings.textureAnisotropy) {
+      this.applyTextureQuality(settings.textureAnisotropy);
+    }
+    
+    this.appliedSettings = {
+      pixelRatio,
+      shadowMapSize: settings.shadowMapSize,
+      shadowSoftness: settings.shadowSoftness,
+      toneMappingExposure: settings.toneMappingExposure,
+      textureAnisotropy: settings.textureAnisotropy
+    };
+    
+    return resized;
+  }
+
+  applyTextureQuality(anisotropy) {
+    if (!this.renderer) return;
+    
+    const maxAnisotropy = this.renderer.capabilities.getMaxAnisotropy();
+    const target = Math.min(anisotropy, maxAnisotropy);
+    
+    this.scene.traverse(object => {
+      if (!object.material) return;
+      
+      const materials = Array.isArray(object.material) ? object.material : [object.material];
+      materials.forEach(material => {
+        if (material.map) {
+          material.map.anisotropy = target;
+          material.map.needsUpdate = true;
+        }
+      });
+    });
   }
 
   onResize() {

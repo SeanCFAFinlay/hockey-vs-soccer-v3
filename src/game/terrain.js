@@ -7,7 +7,7 @@ import * as THREE from 'three';
 import { generatePath } from '../utils/gameUtils.js';
 
 class Terrain {
-  constructor(scene, theme, mapData) {
+  constructor(scene, theme, mapData, qualitySettings = {}) {
     this.scene = scene;
     this.theme = theme;
     this.mapData = mapData;
@@ -15,6 +15,9 @@ class Terrain {
     this.path = [];
     this.cells = []; // For raycasting
     this.cellSize = 1.5;
+    this.materialQuality = qualitySettings.materialQuality || 'standard';
+    this.materials = {};
+    this.ground = null;
     
     this.generate();
   }
@@ -54,19 +57,17 @@ class Terrain {
     const { cols, rows } = this.mapData;
     const _hw = (cols * this.cellSize) / 2; // Half-width (reserved for future use)
     const _hh = (rows * this.cellSize) / 2; // Half-height (reserved for future use)
+    this.materials = this.createMaterials();
     
     // Ground plane
     const groundGeometry = new THREE.PlaneGeometry(
       cols * this.cellSize,
       rows * this.cellSize
     );
-    const groundMaterial = new THREE.MeshLambertMaterial({
-      color: this.theme.groundColor
-    });
-    const ground = new THREE.Mesh(groundGeometry, groundMaterial);
-    ground.rotation.x = -Math.PI / 2;
-    ground.receiveShadow = true;
-    this.scene.add(ground);
+    this.ground = new THREE.Mesh(groundGeometry, this.materials.ground);
+    this.ground.rotation.x = -Math.PI / 2;
+    this.ground.receiveShadow = true;
+    this.scene.add(this.ground);
     
     // Create grid cells for raycasting and path visualization
     for (let y = 0; y < rows; y++) {
@@ -80,23 +81,11 @@ class Terrain {
         const cellType = this.grid[y][x].type;
         
         if (cellType === 'path') {
-          cellMaterial = new THREE.MeshLambertMaterial({
-            color: this.theme.pathColor,
-            transparent: true,
-            opacity: 0.6
-          });
+          cellMaterial = this.materials.path;
         } else if (cellType === 'spawn' || cellType === 'base') {
-          cellMaterial = new THREE.MeshBasicMaterial({
-            color: cellType === 'spawn' ? 0x00ff00 : 0xff0000,
-            transparent: true,
-            opacity: 0.3
-          });
+          cellMaterial = cellType === 'spawn' ? this.materials.spawn : this.materials.base;
         } else {
-          cellMaterial = new THREE.MeshBasicMaterial({
-            color: 0x000000,
-            transparent: true,
-            opacity: 0
-          });
+          cellMaterial = this.materials.empty;
         }
         
         const cell = new THREE.Mesh(cellGeometry, cellMaterial);
@@ -112,6 +101,70 @@ class Terrain {
     
     // Add fog
     this.scene.fog = new THREE.Fog(this.theme.environmentColor, 35, 70);
+  }
+
+  createMaterials() {
+    const useStandard = this.materialQuality === 'standard';
+    const groundOptions = {
+      color: this.theme.groundColor
+    };
+    const pathOptions = {
+      color: this.theme.pathColor,
+      transparent: true,
+      opacity: 0.6
+    };
+    
+    if (useStandard) {
+      return {
+        ground: new THREE.MeshStandardMaterial({
+          ...groundOptions,
+          roughness: 0.85,
+          metalness: 0.05
+        }),
+        path: new THREE.MeshStandardMaterial({
+          ...pathOptions,
+          roughness: 0.6,
+          metalness: 0.1,
+          emissive: this.theme.pathColor,
+          emissiveIntensity: 0.15
+        }),
+        spawn: new THREE.MeshBasicMaterial({
+          color: 0x00ff00,
+          transparent: true,
+          opacity: 0.3
+        }),
+        base: new THREE.MeshBasicMaterial({
+          color: 0xff0000,
+          transparent: true,
+          opacity: 0.3
+        }),
+        empty: new THREE.MeshBasicMaterial({
+          color: 0x000000,
+          transparent: true,
+          opacity: 0
+        })
+      };
+    }
+    
+    return {
+      ground: new THREE.MeshLambertMaterial(groundOptions),
+      path: new THREE.MeshLambertMaterial(pathOptions),
+      spawn: new THREE.MeshBasicMaterial({
+        color: 0x00ff00,
+        transparent: true,
+        opacity: 0.3
+      }),
+      base: new THREE.MeshBasicMaterial({
+        color: 0xff0000,
+        transparent: true,
+        opacity: 0.3
+      }),
+      empty: new THREE.MeshBasicMaterial({
+        color: 0x000000,
+        transparent: true,
+        opacity: 0
+      })
+    };
   }
 
   gridToWorld(gridX, gridY) {
@@ -169,9 +222,45 @@ class Terrain {
     this.cells.forEach(cell => {
       this.scene.remove(cell);
       cell.geometry.dispose();
-      cell.material.dispose();
     });
+    
+    if (this.ground) {
+      this.scene.remove(this.ground);
+      this.ground.geometry.dispose();
+      this.ground = null;
+    }
+
+    Object.values(this.materials).forEach(material => material.dispose());
     this.cells = [];
+  }
+
+  applyMaterialQuality(settings) {
+    if (!settings || settings.materialQuality === this.materialQuality) return;
+    
+    const previousMaterials = this.materials;
+    this.materialQuality = settings.materialQuality;
+    this.materials = this.createMaterials();
+    
+    if (this.ground) {
+      this.ground.material = this.materials.ground;
+    }
+    
+    this.cells.forEach(cell => {
+      const { gridX, gridY } = cell.userData;
+      const cellType = this.grid[gridY][gridX].type;
+      
+      if (cellType === 'path') {
+        cell.material = this.materials.path;
+      } else if (cellType === 'spawn') {
+        cell.material = this.materials.spawn;
+      } else if (cellType === 'base') {
+        cell.material = this.materials.base;
+      } else {
+        cell.material = this.materials.empty;
+      }
+    });
+    
+    Object.values(previousMaterials).forEach(material => material.dispose());
   }
 }
 
