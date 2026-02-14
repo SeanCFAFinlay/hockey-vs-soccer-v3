@@ -1,8 +1,10 @@
-﻿import { defineConfig } from 'vite'
+import { defineConfig } from 'vite'
 import { resolve } from 'path'
 
+const base = process.env.VITE_BASE_URL || '/'
+
 export default defineConfig({
-  base: '/',
+  base,
   build: {
     rollupOptions: {
       input: {

@@ -94,7 +94,15 @@ npm run preview
 
 ### Development Server
 
-The dev server runs at `http://localhost:3000/hockey-vs-soccer-v3/` with hot module replacement.
+The dev server runs at `http://localhost:5173/` with hot module replacement.
+
+### GitHub Pages deployment
+
+Deployments automatically build with `VITE_BASE_URL=/hockey-vs-soccer-v3/` so asset paths work on GitHub Pages. For local verification of the hosted site paths, run:
+
+```bash
+VITE_BASE_URL=/hockey-vs-soccer-v3/ npm run build && npm run preview
+```
 
 ---
 
