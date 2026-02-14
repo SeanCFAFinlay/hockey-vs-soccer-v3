@@ -57,6 +57,12 @@ class PostProcessing {
     // Adjust bloom based on quality
     if (this.bloomPass) {
       this.bloomPass.strength = settings.bloomStrength;
+      this.bloomPass.radius = settings.bloomRadius;
+      this.bloomPass.threshold = settings.bloomThreshold;
+    }
+
+    if (this.smaaPass) {
+      this.smaaPass.enabled = true;
     }
   }
 
@@ -74,6 +80,10 @@ class PostProcessing {
     
     if (this.composer) {
       this.composer.setSize(width, height);
+    }
+
+    if (this.smaaPass) {
+      this.smaaPass.setSize(width, height);
     }
   }
 
