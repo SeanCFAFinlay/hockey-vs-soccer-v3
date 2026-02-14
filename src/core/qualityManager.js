@@ -16,7 +16,7 @@ class QualityManager {
     // Quality settings
     this.settings = {
       low: {
-        pixelRatio: 1.2,
+        pixelRatio: 1,
         shadowMapSize: 1024,
         bloomStrength: 0.25,
         bloomRadius: 0.35,
@@ -55,7 +55,7 @@ class QualityManager {
         shadowSoftness: 3
       },
       ultra: {
-        pixelRatio: 2.4,
+        pixelRatio: 2,
         shadowMapSize: 3072,
         bloomStrength: 0.95,
         bloomRadius: 0.5,
@@ -74,7 +74,8 @@ class QualityManager {
       shadowQuality: 'auto',
       postprocessing: 'auto',
       textureQuality: 'auto',
-      particleDensity: 'auto'
+      particleDensity: 'auto',
+      materialQuality: 'auto'
     };
 
     this.qualityOverrides = {
@@ -109,6 +110,8 @@ class QualityManager {
       minFps: 45,
       maxFps: 65
     };
+    
+    this.defaultParticleDensity = 1;
   }
 
   update() {
@@ -142,16 +145,18 @@ class QualityManager {
     
     // Downgrade if consistently low FPS
     if (avgFps < this.thresholds.minFps && currentIndex > 0) {
+      const previousLevel = this.qualityLevel;
       const nextLevel = this.qualityLevels[currentIndex - 1];
       this.qualityLevel = nextLevel;
-      console.log(`Auto-adjusting quality: ${this.qualityLevels[currentIndex].toUpperCase()} → ${nextLevel.toUpperCase()}`);
+      console.log(`Auto-adjusting quality: ${previousLevel.toUpperCase()} → ${nextLevel.toUpperCase()}`);
     }
     
     // Upgrade if consistently high FPS
     if (avgFps > this.thresholds.maxFps && this.fpsHistory.length >= 5 && currentIndex < this.qualityLevels.length - 1) {
+      const previousLevel = this.qualityLevel;
       const nextLevel = this.qualityLevels[currentIndex + 1];
       this.qualityLevel = nextLevel;
-      console.log(`Auto-adjusting quality: ${this.qualityLevels[currentIndex].toUpperCase()} → ${nextLevel.toUpperCase()}`);
+      console.log(`Auto-adjusting quality: ${previousLevel.toUpperCase()} → ${nextLevel.toUpperCase()}`);
     }
   }
 
@@ -165,6 +170,9 @@ class QualityManager {
       this.userQualityLevel = 'auto';
       this.qualityLevel = 'high'; // Start high and auto-adjust
     } else {
+      if (!this.settings[level]) {
+        console.warn(`Unknown quality setting "${level}". Valid options: low, medium, high, ultra. Defaulting to high.`);
+      }
       const nextLevel = this.settings[level] ? level : 'high';
       this.userQualityLevel = nextLevel;
       this.qualityLevel = nextLevel;
@@ -192,14 +200,14 @@ class QualityManager {
       baseSettings.textureAnisotropy
     );
     const materialQuality = this.resolveQualityOverride(
-      this.userSettings.textureQuality,
+      this.userSettings.materialQuality,
       this.qualityOverrides.materialQuality,
       baseSettings.materialQuality
     );
     const particleDensity = this.resolveQualityOverride(
       this.userSettings.particleDensity,
       this.qualityOverrides.particleDensity,
-      1
+      this.defaultParticleDensity
     );
     const particleCount = Math.max(0.1, baseSettings.particleCount * particleDensity);
     const postprocessing = this.resolvePostprocessing(baseSettings.postprocessing);
@@ -228,7 +236,7 @@ class QualityManager {
       return 1;
     }
     
-    const parsed = Number.parseFloat(value);
+    const parsed = parseFloat(value);
     if (Number.isNaN(parsed)) {
       return 1;
     }

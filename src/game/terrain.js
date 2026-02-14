@@ -223,16 +223,15 @@ class Terrain {
       this.scene.remove(cell);
       cell.geometry.dispose();
     });
-    this.cells = [];
     
     if (this.ground) {
       this.scene.remove(this.ground);
       this.ground.geometry.dispose();
-      this.ground.material.dispose();
       this.ground = null;
     }
-    
+
     Object.values(this.materials).forEach(material => material.dispose());
+    this.cells = [];
   }
 
   applyMaterialQuality(settings) {

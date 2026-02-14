@@ -20,6 +20,7 @@ class Game {
     this.uiManager = null;
     this.gameController = null;
     this.running = false;
+    this.lastQualitySettings = null;
     
     this.init();
   }
@@ -116,7 +117,23 @@ class Game {
     const textureSelect = document.getElementById('textureQuality');
     const particleSelect = document.getElementById('particleDensity');
     
-    if (!panel || !presetSelect || !resolutionSelect || !shadowSelect || !postSelect || !textureSelect || !particleSelect) {
+    const elements = {
+      panel,
+      openBtn,
+      closeBtn,
+      presetSelect,
+      resolutionSelect,
+      shadowSelect,
+      postSelect,
+      textureSelect,
+      particleSelect
+    };
+    const missingElements = Object.entries(elements)
+      .filter(([, value]) => !value)
+      .map(([key]) => key);
+    
+    if (missingElements.length) {
+      console.warn('Graphics settings UI missing elements:', missingElements.join(', '));
       return;
     }
     
@@ -128,9 +145,11 @@ class Game {
       if (value === false) return 'off';
       return value || 'auto';
     };
+    const normalizeResolutionScale = (value) => (value !== undefined ? String(value) : 'auto');
+    const parseResolutionScale = (value) => (value === 'auto' ? 'auto' : Number(value));
     
     presetSelect.value = savedPreset;
-    resolutionSelect.value = savedOptions.resolutionScale !== undefined ? String(savedOptions.resolutionScale) : 'auto';
+    resolutionSelect.value = normalizeResolutionScale(savedOptions.resolutionScale);
     shadowSelect.value = savedOptions.shadowQuality || 'auto';
     postSelect.value = normalizeToggle(savedOptions.postprocessing);
     textureSelect.value = savedOptions.textureQuality || 'auto';
@@ -138,7 +157,7 @@ class Game {
     
     const applySettings = () => {
       const options = {
-        resolutionScale: resolutionSelect.value === 'auto' ? 'auto' : Number(resolutionSelect.value),
+        resolutionScale: parseResolutionScale(resolutionSelect.value),
         shadowQuality: shadowSelect.value,
         postprocessing: postSelect.value,
         textureQuality: textureSelect.value,
@@ -151,7 +170,16 @@ class Game {
       this.qualityManager.setGraphicsOptions(options);
     };
     
-    [presetSelect, resolutionSelect, shadowSelect, postSelect, textureSelect, particleSelect].forEach(select => {
+    const settingSelects = [
+      presetSelect,
+      resolutionSelect,
+      shadowSelect,
+      postSelect,
+      textureSelect,
+      particleSelect
+    ];
+    
+    settingSelects.forEach(select => {
       select.addEventListener('change', applySettings);
     });
     
@@ -200,12 +228,15 @@ class Game {
     
     // Apply quality settings
     const qualitySettings = this.qualityManager.getSettings();
-    const resized = this.engine.applyQualitySettings(qualitySettings);
-    if (resized) {
-      this.postprocessing.onResize();
+    if (this.hasQualitySettingsChanged(qualitySettings)) {
+      const didResize = this.engine.applyQualitySettings(qualitySettings);
+      if (didResize) {
+        this.postprocessing.onResize();
+      }
+      this.gameController.applyQualitySettings(qualitySettings);
+      this.postprocessing.setQuality(qualitySettings);
+      this.lastQualitySettings = { ...qualitySettings };
     }
-    this.gameController.applyQualitySettings(qualitySettings);
-    this.postprocessing.setQuality(qualitySettings);
     
     // Render
     this.postprocessing.render();
@@ -213,6 +244,19 @@ class Game {
 
   stop() {
     this.running = false;
+  }
+
+  hasQualitySettingsChanged(settings) {
+    if (!this.lastQualitySettings) {
+      return true;
+    }
+    
+    const keys = new Set([
+      ...Object.keys(settings),
+      ...Object.keys(this.lastQualitySettings)
+    ]);
+    
+    return Array.from(keys).some(key => settings[key] !== this.lastQualitySettings[key]);
   }
 }
 

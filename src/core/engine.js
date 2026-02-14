@@ -91,7 +91,8 @@ class Engine {
   applyQualitySettings(settings) {
     if (!settings) return;
     
-    const pixelRatio = Math.min(window.devicePixelRatio * settings.resolutionScale, settings.pixelRatio);
+    const basePixelRatio = Math.min(window.devicePixelRatio, settings.pixelRatio);
+    const pixelRatio = Math.min(basePixelRatio * settings.resolutionScale, settings.pixelRatio);
     let resized = false;
     
     if (!this.appliedSettings || this.appliedSettings.pixelRatio !== pixelRatio) {
