@@ -12,6 +12,7 @@ import { gridToWorld } from './pathing/pathUtils.ts';
 import type { Engine } from '../three/Engine.ts';
 import type { TowerType } from './towers/towerTypes.ts';
 import { EffectsManager } from '../three/EffectsManager.ts';
+import { getAudioManager } from '../audio/AudioManager.ts';
 
 export interface GameCallbacks {
   onStateUpdate: (state: GameState) => void;
@@ -82,6 +83,9 @@ export class GameController {
   startWave(): void {
     if (this.state.phase !== 'placing') return;
     this.state.startWave();
+    
+    // Play wave start sound
+    getAudioManager().playSFX('wave-start');
 
     const waveComp = this.waveCompositions[this.state.wave - 1] ?? {};
     const paths = this.builtPaths.mainPaths;
@@ -100,9 +104,13 @@ export class GameController {
   }
 
   tryPlaceTower(towerType: TowerType, gridX: number, gridY: number): boolean {
-    if (!this.state.spendMoney(towerType.cost)) return false;
+    if (!this.state.spendMoney(towerType.cost)) {
+      getAudioManager().playSFX('error');
+      return false;
+    }
     const worldPos = gridToWorld({ x: gridX, y: gridY }, this.map.cols, this.map.rows);
     this.towers.placeTower(towerType, gridX, gridY, worldPos);
+    getAudioManager().playSFX('tower-place');
     this.callbacks.onStateUpdate(this.state);
     return true;
   }
@@ -139,8 +147,9 @@ export class GameController {
     const shots = this.towers.update(dt, enemyList);
 
     for (const shot of shots) {
-      // Add firing visual effect
+      // Add firing visual effect and sound
       this.effects.createFirePulse(shot.tower.mesh);
+      getAudioManager().playSFX('tower-fire');
       
       this.projectiles.fire(
         shot.tower.mesh.position.clone(),
@@ -156,8 +165,9 @@ export class GameController {
     const hits = this.projectiles.update(dt, enemyMap);
 
     for (const hit of hits) {
-      // Add impact visual effect
+      // Add impact visual effect and sound
       this.effects.createImpactFlash(hit.hitPosition, hit.color);
+      getAudioManager().playSFX('projectile-hit');
       
       const tower = hit.towerType;
       const killed = this.enemies.damage(hit.targetId, hit.damage);
@@ -185,7 +195,9 @@ export class GameController {
             const splashKilled = this.enemies.damage(splashEnemy.id, splashDmg);
             if (splashKilled) {
               this.effects.createDeathEffect(splashKilled.mesh, 0.4);
+              getAudioManager().playSFX('enemy-death');
               this.state.addMoney(splashKilled.type.reward);
+              getAudioManager().playSFX('money-earn');
             }
           }
         }
@@ -207,7 +219,9 @@ export class GameController {
             const chainKilled = this.enemies.damage(chainTarget.id, chainDmg);
             if (chainKilled) {
               this.effects.createDeathEffect(chainKilled.mesh, 0.4);
+              getAudioManager().playSFX('enemy-death');
               this.state.addMoney(chainKilled.type.reward);
+              getAudioManager().playSFX('money-earn');
             }
             
             currentPos = chainTarget.mesh.position.clone();
@@ -217,9 +231,11 @@ export class GameController {
       }
       
       if (killed) {
-        // Add death animation
+        // Add death animation and sound
         this.effects.createDeathEffect(killed.mesh, 0.4);
+        getAudioManager().playSFX('enemy-death');
         this.state.addMoney(killed.type.reward);
+        getAudioManager().playSFX('money-earn');
       }
     }
 
@@ -229,8 +245,10 @@ export class GameController {
       // After waveComplete(), phase may change to 'won', 'lost', or 'placing'
       const phase = this.state.phase;
       if (phase === 'won' || phase === 'lost') {
+        getAudioManager().playSFX(phase === 'won' ? 'game-over-win' : 'game-over-lose');
         this.callbacks.onGameOver(phase === 'won');
       } else {
+        getAudioManager().playSFX('wave-complete');
         this.callbacks.onWaveComplete();
       }
     }
