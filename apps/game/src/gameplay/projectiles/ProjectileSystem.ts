@@ -7,6 +7,7 @@ export interface ActiveProjectile {
   targetId: string;
   damage: number;
   speed: number;
+  color: string;
 }
 
 let projIdCounter = 0;
@@ -14,6 +15,7 @@ let projIdCounter = 0;
 export class ProjectileSystem {
   private scene: THREE.Scene;
   projectiles: ActiveProjectile[] = [];
+  private trailTimer = 0;
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
@@ -29,11 +31,15 @@ export class ProjectileSystem {
       targetId,
       damage,
       speed: 14,
+      color,
     });
   }
 
-  update(dt: number, enemies: Map<string, THREE.Object3D>): Array<{ projectileId: string; targetId: string; damage: number }> {
-    const hits: Array<{ projectileId: string; targetId: string; damage: number }> = [];
+  update(
+    dt: number,
+    enemies: Map<string, THREE.Object3D>
+  ): Array<{ projectileId: string; targetId: string; damage: number; hitPosition: THREE.Vector3; color: string }> {
+    const hits: Array<{ projectileId: string; targetId: string; damage: number; hitPosition: THREE.Vector3; color: string }> = [];
     const toRemove: string[] = [];
 
     for (const proj of this.projectiles) {
@@ -47,7 +53,13 @@ export class ProjectileSystem {
       const dist = dir.length();
 
       if (dist < 0.3) {
-        hits.push({ projectileId: proj.id, targetId: proj.targetId, damage: proj.damage });
+        hits.push({
+          projectileId: proj.id,
+          targetId: proj.targetId,
+          damage: proj.damage,
+          hitPosition: proj.mesh.position.clone(),
+          color: proj.color,
+        });
         toRemove.push(proj.id);
       } else {
         proj.mesh.position.addScaledVector(dir.normalize(), proj.speed * dt);

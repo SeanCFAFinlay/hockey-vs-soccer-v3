@@ -11,6 +11,7 @@ import { Terrain } from '../three/Terrain.ts';
 import { gridToWorld } from './pathing/pathUtils.ts';
 import type { Engine } from '../three/Engine.ts';
 import type { TowerType } from './towers/towerTypes.ts';
+import { EffectsManager } from '../three/EffectsManager.ts';
 
 export interface GameCallbacks {
   onStateUpdate: (state: GameState) => void;
@@ -23,6 +24,7 @@ export class GameController {
   private towers: TowerSystem;
   private enemies: EnemySystem;
   private projectiles: ProjectileSystem;
+  private effects: EffectsManager;
   private terrain: Terrain;
   private builtPaths: BuiltPaths;
   private callbacks: GameCallbacks;
@@ -52,6 +54,7 @@ export class GameController {
     this.towers = new TowerSystem(engine.scene);
     this.enemies = new EnemySystem(engine.scene);
     this.projectiles = new ProjectileSystem(engine.scene);
+    this.effects = new EffectsManager(engine.scene);
 
     // Pre-generate wave compositions
     this.generateWaveCompositions(config.totalWaves, config.enemies);
@@ -116,6 +119,9 @@ export class GameController {
     if (this.state.isOver) return;
     if (this.state.phase !== 'waveActive') return;
 
+    // Update effects
+    this.effects.update(dt);
+
     const { reached } = this.enemies.update(dt, this.state.gameSpeed);
 
     // Handle enemies reaching the pen
@@ -133,6 +139,9 @@ export class GameController {
     const shots = this.towers.update(dt, enemyList);
 
     for (const shot of shots) {
+      // Add firing visual effect
+      this.effects.createFirePulse(shot.tower.mesh);
+      
       this.projectiles.fire(
         shot.tower.mesh.position.clone(),
         shot.targetId,
@@ -146,8 +155,13 @@ export class GameController {
     const hits = this.projectiles.update(dt, enemyMap);
 
     for (const hit of hits) {
+      // Add impact visual effect
+      this.effects.createImpactFlash(hit.hitPosition, hit.color);
+      
       const killed = this.enemies.damage(hit.targetId, hit.damage);
       if (killed) {
+        // Add death animation
+        this.effects.createDeathEffect(killed.mesh, 0.4);
         this.state.addMoney(killed.type.reward);
       }
     }
@@ -155,9 +169,10 @@ export class GameController {
     // Check wave complete
     if (!this.enemies.hasEnemiesOrQueue()) {
       this.state.waveComplete();
-      // After waveComplete(), phase can be 'won', 'lost', or 'placing'
-      if (this.state.phase === 'won' || this.state.phase === 'lost') {
-        this.callbacks.onGameOver(this.state.phase === 'won');
+      // After waveComplete(), phase may change to 'won', 'lost', or 'placing'
+      const phase = this.state.phase;
+      if (phase === 'won' || phase === 'lost') {
+        this.callbacks.onGameOver(phase === 'won');
       } else {
         this.callbacks.onWaveComplete();
       }
@@ -170,6 +185,7 @@ export class GameController {
     this.towers.destroy();
     this.enemies.destroy();
     this.projectiles.destroy();
+    this.effects.destroy();
     this.terrain.destroy();
   }
 }
