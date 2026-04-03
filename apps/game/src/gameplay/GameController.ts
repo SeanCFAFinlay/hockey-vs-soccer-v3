@@ -155,8 +155,9 @@ export class GameController {
     // Check wave complete
     if (!this.enemies.hasEnemiesOrQueue()) {
       this.state.waveComplete();
-      if (this.state.phase === 'won') {
-        this.callbacks.onGameOver(true);
+      // After waveComplete(), phase can be 'won', 'lost', or 'placing'
+      if (this.state.phase === 'won' || this.state.phase === 'lost') {
+        this.callbacks.onGameOver(this.state.phase === 'won');
       } else {
         this.callbacks.onWaveComplete();
       }

@@ -24,7 +24,7 @@ export class EnemySystem {
   private scene: THREE.Scene;
   enemies: ActiveEnemy[] = [];
   private spawnTimer = 0;
-  private spawnQueue: Array<{ type: EnemyType; path: BuiltPath }> = [];
+  private spawnQueue: Array<{ type: EnemyType; path: BuiltPath; hpScale: number }> = [];
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
@@ -33,9 +33,8 @@ export class EnemySystem {
   queueWave(waveEnemy: EnemyType, count: number, path: BuiltPath, waveNum: number): void {
     const hpScale = 1 + waveNum * GAME_CONSTANTS.ENEMY_HP_SCALE_PER_WAVE;
     for (let i = 0; i < count; i++) {
-      this.spawnQueue.push({ type: waveEnemy, path });
+      this.spawnQueue.push({ type: waveEnemy, path, hpScale });
     }
-    void hpScale;
   }
 
   update(dt: number, gameSpeed: number): { reached: ActiveEnemy[]; killed: ActiveEnemy[] } {
@@ -46,7 +45,7 @@ export class EnemySystem {
     this.spawnTimer -= dt * 1000 * gameSpeed;
     if (this.spawnTimer <= 0 && this.spawnQueue.length > 0) {
       const item = this.spawnQueue.shift()!;
-      this.spawnEnemy(item.type, item.path);
+      this.spawnEnemy(item.type, item.path, item.hpScale);
       this.spawnTimer = GAME_CONSTANTS.ENEMY_SPAWN_DELAY;
     }
 
@@ -107,17 +106,18 @@ export class EnemySystem {
     return this.enemies.length > 0 || this.spawnQueue.length > 0;
   }
 
-  private spawnEnemy(type: EnemyType, path: BuiltPath): void {
+  private spawnEnemy(type: EnemyType, path: BuiltPath, hpScale: number): void {
     const mesh = SceneFactory.createEnemyMesh(type.size);
     const start = path.waypoints[0].clone();
     mesh.position.copy(start);
     this.scene.add(mesh);
 
+    const scaledHp = Math.floor(type.hp * hpScale);
     const enemy: ActiveEnemy = {
       id: `enemy_${++enemyIdCounter}`,
       type,
-      hp: type.hp,
-      maxHp: type.hp,
+      hp: scaledHp,
+      maxHp: scaledHp,
       speed: type.speed,
       mesh,
       pathIndex: 0,
