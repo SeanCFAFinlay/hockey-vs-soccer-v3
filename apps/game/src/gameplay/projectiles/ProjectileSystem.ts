@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { SceneFactory } from '../../three/SceneFactory.ts';
+import type { PlacedTower } from '../towers/TowerSystem.ts';
 
 export interface ActiveProjectile {
   id: string;
@@ -8,6 +9,7 @@ export interface ActiveProjectile {
   damage: number;
   speed: number;
   color: string;
+  tower: PlacedTower | null;
 }
 
 let projIdCounter = 0;
@@ -21,7 +23,7 @@ export class ProjectileSystem {
     this.scene = scene;
   }
 
-  fire(from: THREE.Vector3, targetId: string, damage: number, color = '#ffffff'): void {
+  fire(from: THREE.Vector3, targetId: string, damage: number, color = '#ffffff', tower: PlacedTower | null = null): void {
     const mesh = SceneFactory.createProjectileMesh(color);
     mesh.position.copy(from).setY(0.5);
     this.scene.add(mesh);
@@ -32,14 +34,31 @@ export class ProjectileSystem {
       damage,
       speed: 14,
       color,
+      tower,
     });
   }
 
   update(
     dt: number,
     enemies: Map<string, THREE.Object3D>
-  ): Array<{ projectileId: string; targetId: string; damage: number; hitPosition: THREE.Vector3; color: string }> {
-    const hits: Array<{ projectileId: string; targetId: string; damage: number; hitPosition: THREE.Vector3; color: string }> = [];
+  ): Array<{
+    projectileId: string;
+    targetId: string;
+    damage: number;
+    hitPosition: THREE.Vector3;
+    color: string;
+    towerType: typeof import('../towers/towerTypes.ts').TowerType | null;
+    towerLevel: number;
+  }> {
+    const hits: Array<{
+      projectileId: string;
+      targetId: string;
+      damage: number;
+      hitPosition: THREE.Vector3;
+      color: string;
+      towerType: typeof import('../towers/towerTypes.ts').TowerType | null;
+      towerLevel: number;
+    }> = [];
     const toRemove: string[] = [];
 
     for (const proj of this.projectiles) {
@@ -59,6 +78,8 @@ export class ProjectileSystem {
           damage: proj.damage,
           hitPosition: proj.mesh.position.clone(),
           color: proj.color,
+          towerType: proj.tower?.type ?? null,
+          towerLevel: proj.tower?.level ?? 0,
         });
         toRemove.push(proj.id);
       } else {

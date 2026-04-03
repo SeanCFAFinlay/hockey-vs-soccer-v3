@@ -147,6 +147,7 @@ export class GameController {
         shot.targetId,
         this.towers.getDamage(shot.tower),
         shot.tower.type.color,
+        shot.tower,
       );
     }
 
@@ -158,7 +159,63 @@ export class GameController {
       // Add impact visual effect
       this.effects.createImpactFlash(hit.hitPosition, hit.color);
       
+      const tower = hit.towerType;
       const killed = this.enemies.damage(hit.targetId, hit.damage);
+      
+      // Apply special effects based on tower type
+      if (tower) {
+        // Burn effect
+        if (tower.burnDamage && tower.burnDuration) {
+          const burnDmg = tower.burnDamage[hit.towerLevel];
+          this.enemies.applyBurn(hit.targetId, burnDmg, tower.burnDuration);
+        }
+        
+        // Slow effect
+        if (tower.slowPower && tower.slowDuration) {
+          const duration = tower.slowDuration[hit.towerLevel];
+          this.enemies.applySlow(hit.targetId, duration);
+        }
+        
+        // Splash damage
+        if (tower.splash) {
+          const radius = tower.splash[hit.towerLevel];
+          const splashTargets = this.enemies.getEnemiesInRadius(hit.hitPosition, radius, hit.targetId);
+          for (const splashEnemy of splashTargets) {
+            const splashDmg = Math.floor(hit.damage * 0.5);
+            const splashKilled = this.enemies.damage(splashEnemy.id, splashDmg);
+            if (splashKilled) {
+              this.effects.createDeathEffect(splashKilled.mesh, 0.4);
+              this.state.addMoney(splashKilled.type.reward);
+            }
+          }
+        }
+        
+        // Chain lightning
+        if (tower.chainTargets && tower.chainRange) {
+          const chains = tower.chainTargets[hit.towerLevel];
+          let currentPos = hit.hitPosition.clone();
+          let lastTargetId = hit.targetId;
+          
+          for (let i = 0; i < chains - 1; i++) {
+            const nearbyEnemies = this.enemies.getEnemiesInRadius(currentPos, tower.chainRange, lastTargetId);
+            if (nearbyEnemies.length === 0) break;
+            
+            const chainTarget = nearbyEnemies[0];
+            const chainDmg = Math.floor(hit.damage * 0.7);
+            this.effects.createImpactFlash(chainTarget.mesh.position, hit.color);
+            
+            const chainKilled = this.enemies.damage(chainTarget.id, chainDmg);
+            if (chainKilled) {
+              this.effects.createDeathEffect(chainKilled.mesh, 0.4);
+              this.state.addMoney(chainKilled.type.reward);
+            }
+            
+            currentPos = chainTarget.mesh.position.clone();
+            lastTargetId = chainTarget.id;
+          }
+        }
+      }
+      
       if (killed) {
         // Add death animation
         this.effects.createDeathEffect(killed.mesh, 0.4);
