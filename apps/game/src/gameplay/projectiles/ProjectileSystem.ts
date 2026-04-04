@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { SceneFactory } from '../../three/SceneFactory.ts';
+import type { PlacedTower } from '../towers/TowerSystem.ts';
 
 export interface ActiveProjectile {
   id: string;
@@ -7,6 +8,8 @@ export interface ActiveProjectile {
   targetId: string;
   damage: number;
   speed: number;
+  color: string;
+  tower: PlacedTower | null;
 }
 
 let projIdCounter = 0;
@@ -14,12 +17,13 @@ let projIdCounter = 0;
 export class ProjectileSystem {
   private scene: THREE.Scene;
   projectiles: ActiveProjectile[] = [];
+  private trailTimer = 0;
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
   }
 
-  fire(from: THREE.Vector3, targetId: string, damage: number, color = '#ffffff'): void {
+  fire(from: THREE.Vector3, targetId: string, damage: number, color = '#ffffff', tower: PlacedTower | null = null): void {
     const mesh = SceneFactory.createProjectileMesh(color);
     mesh.position.copy(from).setY(0.5);
     this.scene.add(mesh);
@@ -29,11 +33,32 @@ export class ProjectileSystem {
       targetId,
       damage,
       speed: 14,
+      color,
+      tower,
     });
   }
 
-  update(dt: number, enemies: Map<string, THREE.Object3D>): Array<{ projectileId: string; targetId: string; damage: number }> {
-    const hits: Array<{ projectileId: string; targetId: string; damage: number }> = [];
+  update(
+    dt: number,
+    enemies: Map<string, THREE.Object3D>
+  ): Array<{
+    projectileId: string;
+    targetId: string;
+    damage: number;
+    hitPosition: THREE.Vector3;
+    color: string;
+    towerType: typeof import('../towers/towerTypes.ts').TowerType | null;
+    towerLevel: number;
+  }> {
+    const hits: Array<{
+      projectileId: string;
+      targetId: string;
+      damage: number;
+      hitPosition: THREE.Vector3;
+      color: string;
+      towerType: typeof import('../towers/towerTypes.ts').TowerType | null;
+      towerLevel: number;
+    }> = [];
     const toRemove: string[] = [];
 
     for (const proj of this.projectiles) {
@@ -47,7 +72,15 @@ export class ProjectileSystem {
       const dist = dir.length();
 
       if (dist < 0.3) {
-        hits.push({ projectileId: proj.id, targetId: proj.targetId, damage: proj.damage });
+        hits.push({
+          projectileId: proj.id,
+          targetId: proj.targetId,
+          damage: proj.damage,
+          hitPosition: proj.mesh.position.clone(),
+          color: proj.color,
+          towerType: proj.tower?.type ?? null,
+          towerLevel: proj.tower?.level ?? 0,
+        });
         toRemove.push(proj.id);
       } else {
         proj.mesh.position.addScaledVector(dir.normalize(), proj.speed * dt);

@@ -16,6 +16,8 @@ export interface ActiveEnemy {
   path: BuiltPath;
   done: boolean;
   slowTimer: number;
+  burnDamage: number;
+  burnTimer: number;
 }
 
 let enemyIdCounter = 0;
@@ -24,7 +26,7 @@ export class EnemySystem {
   private scene: THREE.Scene;
   enemies: ActiveEnemy[] = [];
   private spawnTimer = 0;
-  private spawnQueue: Array<{ type: EnemyType; path: BuiltPath }> = [];
+  private spawnQueue: Array<{ type: EnemyType; path: BuiltPath; hpScale: number }> = [];
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
@@ -33,9 +35,8 @@ export class EnemySystem {
   queueWave(waveEnemy: EnemyType, count: number, path: BuiltPath, waveNum: number): void {
     const hpScale = 1 + waveNum * GAME_CONSTANTS.ENEMY_HP_SCALE_PER_WAVE;
     for (let i = 0; i < count; i++) {
-      this.spawnQueue.push({ type: waveEnemy, path });
+      this.spawnQueue.push({ type: waveEnemy, path, hpScale });
     }
-    void hpScale;
   }
 
   update(dt: number, gameSpeed: number): { reached: ActiveEnemy[]; killed: ActiveEnemy[] } {
@@ -46,7 +47,7 @@ export class EnemySystem {
     this.spawnTimer -= dt * 1000 * gameSpeed;
     if (this.spawnTimer <= 0 && this.spawnQueue.length > 0) {
       const item = this.spawnQueue.shift()!;
-      this.spawnEnemy(item.type, item.path);
+      this.spawnEnemy(item.type, item.path, item.hpScale);
       this.spawnTimer = GAME_CONSTANTS.ENEMY_SPAWN_DELAY;
     }
 
@@ -54,6 +55,24 @@ export class EnemySystem {
 
     for (const enemy of this.enemies) {
       if (enemy.done) continue;
+
+      // Apply burn damage over time
+      if (enemy.burnTimer > 0) {
+        enemy.burnTimer -= dt * gameSpeed;
+        enemy.hp -= enemy.burnDamage * dt * gameSpeed;
+        
+        // Visual burn effect (increase emissive)
+        const mesh = enemy.mesh as THREE.Mesh;
+        const mat = mesh.material as THREE.MeshStandardMaterial;
+        mat.emissiveIntensity = 0.6 + Math.sin(enemy.burnTimer * 10) * 0.2;
+        
+        if (enemy.hp <= 0) {
+          enemy.done = true;
+          killed.push(enemy);
+          toRemove.push(enemy);
+          continue;
+        }
+      }
 
       const speedMult = enemy.slowTimer > 0 ? 0.5 : 1;
       const actualSpeed = enemy.speed * speedMult * gameSpeed;
@@ -103,21 +122,57 @@ export class EnemySystem {
     return null;
   }
 
+  applyBurn(enemyId: string, damage: number, duration: number): void {
+    const enemy = this.enemies.find((e) => e.id === enemyId);
+    if (!enemy) return;
+    enemy.burnDamage = damage;
+    enemy.burnTimer = duration;
+  }
+
+  applySlow(enemyId: string, duration: number): void {
+    const enemy = this.enemies.find((e) => e.id === enemyId);
+    if (!enemy) return;
+    enemy.slowTimer = Math.max(enemy.slowTimer, duration);
+  }
+
+  // Get enemies within radius for splash/chain effects
+  getEnemiesInRadius(position: THREE.Vector3, radius: number, excludeId?: string): ActiveEnemy[] {
+    return this.enemies.filter((e) => {
+      if (e.id === excludeId) return false;
+      if (e.done) return false;
+      const dist = e.mesh.position.distanceTo(position);
+      return dist <= radius;
+    });
+  }
+
   hasEnemiesOrQueue(): boolean {
     return this.enemies.length > 0 || this.spawnQueue.length > 0;
   }
 
-  private spawnEnemy(type: EnemyType, path: BuiltPath): void {
+  private spawnEnemy(type: EnemyType, path: BuiltPath, hpScale: number): void {
     const mesh = SceneFactory.createEnemyMesh(type.size);
     const start = path.waypoints[0].clone();
     mesh.position.copy(start);
     this.scene.add(mesh);
 
+    const scaledHp = Math.floor(type.hp * hpScale);
     const enemy: ActiveEnemy = {
       id: `enemy_${++enemyIdCounter}`,
       type,
-      hp: type.hp,
-      maxHp: type.hp,
+      hp: scaledHp,
+      maxHp: scaledHp,
+      speed: type.speed,
+      mesh,
+      pathIndex: 0,
+      pathProgress: 0,
+      path,
+      done: false,
+      slowTimer: 0,
+      burnDamage: 0,
+      burnTimer: 0,
+    };
+    this.enemies.push(enemy);
+  }
       speed: type.speed,
       mesh,
       pathIndex: 0,

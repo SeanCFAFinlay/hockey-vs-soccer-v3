@@ -11,6 +11,8 @@ import { Terrain } from '../three/Terrain.ts';
 import { gridToWorld } from './pathing/pathUtils.ts';
 import type { Engine } from '../three/Engine.ts';
 import type { TowerType } from './towers/towerTypes.ts';
+import { EffectsManager } from '../three/EffectsManager.ts';
+import { getAudioManager } from '../audio/AudioManager.ts';
 
 export interface GameCallbacks {
   onStateUpdate: (state: GameState) => void;
@@ -23,6 +25,7 @@ export class GameController {
   private towers: TowerSystem;
   private enemies: EnemySystem;
   private projectiles: ProjectileSystem;
+  private effects: EffectsManager;
   private terrain: Terrain;
   private builtPaths: BuiltPaths;
   private callbacks: GameCallbacks;
@@ -52,6 +55,7 @@ export class GameController {
     this.towers = new TowerSystem(engine.scene);
     this.enemies = new EnemySystem(engine.scene);
     this.projectiles = new ProjectileSystem(engine.scene);
+    this.effects = new EffectsManager(engine.scene);
 
     // Pre-generate wave compositions
     this.generateWaveCompositions(config.totalWaves, config.enemies);
@@ -79,6 +83,9 @@ export class GameController {
   startWave(): void {
     if (this.state.phase !== 'placing') return;
     this.state.startWave();
+    
+    // Play wave start sound
+    getAudioManager().playSFX('wave-start');
 
     const waveComp = this.waveCompositions[this.state.wave - 1] ?? {};
     const paths = this.builtPaths.mainPaths;
@@ -97,9 +104,13 @@ export class GameController {
   }
 
   tryPlaceTower(towerType: TowerType, gridX: number, gridY: number): boolean {
-    if (!this.state.spendMoney(towerType.cost)) return false;
+    if (!this.state.spendMoney(towerType.cost)) {
+      getAudioManager().playSFX('error');
+      return false;
+    }
     const worldPos = gridToWorld({ x: gridX, y: gridY }, this.map.cols, this.map.rows);
     this.towers.placeTower(towerType, gridX, gridY, worldPos);
+    getAudioManager().playSFX('tower-place');
     this.callbacks.onStateUpdate(this.state);
     return true;
   }
@@ -115,6 +126,9 @@ export class GameController {
   private tick(dt: number): void {
     if (this.state.isOver) return;
     if (this.state.phase !== 'waveActive') return;
+
+    // Update effects
+    this.effects.update(dt);
 
     const { reached } = this.enemies.update(dt, this.state.gameSpeed);
 
@@ -133,11 +147,16 @@ export class GameController {
     const shots = this.towers.update(dt, enemyList);
 
     for (const shot of shots) {
+      // Add firing visual effect and sound
+      this.effects.createFirePulse(shot.tower.mesh);
+      getAudioManager().playSFX('tower-fire');
+      
       this.projectiles.fire(
         shot.tower.mesh.position.clone(),
         shot.targetId,
         this.towers.getDamage(shot.tower),
         shot.tower.type.color,
+        shot.tower,
       );
     }
 
@@ -146,18 +165,90 @@ export class GameController {
     const hits = this.projectiles.update(dt, enemyMap);
 
     for (const hit of hits) {
+      // Add impact visual effect and sound
+      this.effects.createImpactFlash(hit.hitPosition, hit.color);
+      getAudioManager().playSFX('projectile-hit');
+      
+      const tower = hit.towerType;
       const killed = this.enemies.damage(hit.targetId, hit.damage);
+      
+      // Apply special effects based on tower type
+      if (tower) {
+        // Burn effect
+        if (tower.burnDamage && tower.burnDuration) {
+          const burnDmg = tower.burnDamage[hit.towerLevel];
+          this.enemies.applyBurn(hit.targetId, burnDmg, tower.burnDuration);
+        }
+        
+        // Slow effect
+        if (tower.slowPower && tower.slowDuration) {
+          const duration = tower.slowDuration[hit.towerLevel];
+          this.enemies.applySlow(hit.targetId, duration);
+        }
+        
+        // Splash damage
+        if (tower.splash) {
+          const radius = tower.splash[hit.towerLevel];
+          const splashTargets = this.enemies.getEnemiesInRadius(hit.hitPosition, radius, hit.targetId);
+          for (const splashEnemy of splashTargets) {
+            const splashDmg = Math.floor(hit.damage * 0.5);
+            const splashKilled = this.enemies.damage(splashEnemy.id, splashDmg);
+            if (splashKilled) {
+              this.effects.createDeathEffect(splashKilled.mesh, 0.4);
+              getAudioManager().playSFX('enemy-death');
+              this.state.addMoney(splashKilled.type.reward);
+              getAudioManager().playSFX('money-earn');
+            }
+          }
+        }
+        
+        // Chain lightning
+        if (tower.chainTargets && tower.chainRange) {
+          const chains = tower.chainTargets[hit.towerLevel];
+          let currentPos = hit.hitPosition.clone();
+          let lastTargetId = hit.targetId;
+          
+          for (let i = 0; i < chains - 1; i++) {
+            const nearbyEnemies = this.enemies.getEnemiesInRadius(currentPos, tower.chainRange, lastTargetId);
+            if (nearbyEnemies.length === 0) break;
+            
+            const chainTarget = nearbyEnemies[0];
+            const chainDmg = Math.floor(hit.damage * 0.7);
+            this.effects.createImpactFlash(chainTarget.mesh.position, hit.color);
+            
+            const chainKilled = this.enemies.damage(chainTarget.id, chainDmg);
+            if (chainKilled) {
+              this.effects.createDeathEffect(chainKilled.mesh, 0.4);
+              getAudioManager().playSFX('enemy-death');
+              this.state.addMoney(chainKilled.type.reward);
+              getAudioManager().playSFX('money-earn');
+            }
+            
+            currentPos = chainTarget.mesh.position.clone();
+            lastTargetId = chainTarget.id;
+          }
+        }
+      }
+      
       if (killed) {
+        // Add death animation and sound
+        this.effects.createDeathEffect(killed.mesh, 0.4);
+        getAudioManager().playSFX('enemy-death');
         this.state.addMoney(killed.type.reward);
+        getAudioManager().playSFX('money-earn');
       }
     }
 
     // Check wave complete
     if (!this.enemies.hasEnemiesOrQueue()) {
       this.state.waveComplete();
-      if (this.state.phase === 'won') {
-        this.callbacks.onGameOver(true);
+      // After waveComplete(), phase may change to 'won', 'lost', or 'placing'
+      const phase = this.state.phase;
+      if (phase === 'won' || phase === 'lost') {
+        getAudioManager().playSFX(phase === 'won' ? 'game-over-win' : 'game-over-lose');
+        this.callbacks.onGameOver(phase === 'won');
       } else {
+        getAudioManager().playSFX('wave-complete');
         this.callbacks.onWaveComplete();
       }
     }
@@ -169,6 +260,7 @@ export class GameController {
     this.towers.destroy();
     this.enemies.destroy();
     this.projectiles.destroy();
+    this.effects.destroy();
     this.terrain.destroy();
   }
 }

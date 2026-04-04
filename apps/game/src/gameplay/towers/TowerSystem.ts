@@ -25,7 +25,7 @@ export class TowerSystem {
   }
 
   placeTower(type: TowerType, gridX: number, gridY: number, worldPos: THREE.Vector3): PlacedTower {
-    const mesh = SceneFactory.createTowerMesh(type.color);
+    const mesh = SceneFactory.createTowerMesh(type.color, 0);
     mesh.position.set(worldPos.x, 0, worldPos.z);
     this.scene.add(mesh);
 
@@ -48,6 +48,15 @@ export class TowerSystem {
     if (cost === undefined) return 0;
     tower.level++;
     tower.totalSpent += cost;
+    
+    // Update mesh to reflect new level
+    const oldMesh = tower.mesh;
+    const newMesh = SceneFactory.createTowerMesh(tower.type.color, tower.level);
+    newMesh.position.copy(oldMesh.position);
+    this.scene.remove(oldMesh);
+    this.scene.add(newMesh);
+    tower.mesh = newMesh;
+    
     return cost;
   }
 
