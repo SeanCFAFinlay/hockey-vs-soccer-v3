@@ -7,6 +7,7 @@ export interface ActiveProjectile {
   targetId: string;
   damage: number;
   speed: number;
+  projectileType: string;
 }
 
 let projIdCounter = 0;
@@ -19,8 +20,8 @@ export class ProjectileSystem {
     this.scene = scene;
   }
 
-  fire(from: THREE.Vector3, targetId: string, damage: number, color = '#ffffff'): void {
-    const mesh = SceneFactory.createProjectileMesh(color);
+  fire(from: THREE.Vector3, targetId: string, damage: number, color = '#ffffff', projectileType = 'default', speed = 14): void {
+    const mesh = SceneFactory.createProjectileMesh(color, projectileType);
     mesh.position.copy(from).setY(0.5);
     this.scene.add(mesh);
     this.projectiles.push({
@@ -28,7 +29,8 @@ export class ProjectileSystem {
       mesh,
       targetId,
       damage,
-      speed: 14,
+      speed,
+      projectileType,
     });
   }
 
@@ -51,6 +53,12 @@ export class ProjectileSystem {
         toRemove.push(proj.id);
       } else {
         proj.mesh.position.addScaledVector(dir.normalize(), proj.speed * dt);
+        
+        // Rotate projectiles that have rotation flag
+        if (proj.mesh.userData.rotateOnFly) {
+          proj.mesh.rotation.y += dt * 10;
+          proj.mesh.rotation.x += dt * 8;
+        }
       }
     }
 

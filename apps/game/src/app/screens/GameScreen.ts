@@ -105,12 +105,12 @@ export class GameScreen {
       },
     });
 
-    // Tap to place tower
+    // Tap/click to place tower - unified touch and mouse handling
     const groundPlane = new Plane(new Vector3(0, 1, 0), 0);
     const clickPoint = new Vector3();
     const mouseVec = new Vector2();
 
-    this.clickHandler = (e: MouseEvent) => {
+    const handleTap = (clientX: number, clientY: number) => {
       if (this.selectedTowerIdx === null) return;
       const state = this.controller?.getState();
       if (!state || state.phase === 'waveActive') return;
@@ -121,8 +121,8 @@ export class GameScreen {
       const map = config.map;
 
       mouseVec.set(
-        ((e.clientX - rect.left) / rect.width) * 2 - 1,
-        -((e.clientY - rect.top) / rect.height) * 2 + 1,
+        ((clientX - rect.left) / rect.width) * 2 - 1,
+        -((clientY - rect.top) / rect.height) * 2 + 1,
       );
       this.engine.raycaster.setFromCamera(mouseVec, this.engine.camera);
       this.engine.raycaster.ray.intersectPlane(groundPlane, clickPoint);
@@ -133,11 +133,29 @@ export class GameScreen {
       const gy = Math.floor(clickPoint.z + offsetZ);
 
       if (gx >= 0 && gx < map.cols && gy >= 0 && gy < map.rows) {
-        this.controller?.tryPlaceTower(towerType, gx, gy);
+        const placed = this.controller?.tryPlaceTower(towerType, gx, gy);
+        if (placed) {
+          // Clear selection after successful placement
+          this.towerBar?.clearSelection();
+          this.selectedTowerIdx = null;
+        }
+      }
+    };
+
+    this.clickHandler = (e: MouseEvent) => {
+      handleTap(e.clientX, e.clientY);
+    };
+
+    const touchHandler = (e: TouchEvent) => {
+      if (e.touches.length === 1) {
+        e.preventDefault(); // Prevent double-tap zoom
+        const touch = e.touches[0];
+        handleTap(touch.clientX, touch.clientY);
       }
     };
 
     this.canvas.addEventListener('click', this.clickHandler);
+    this.canvas.addEventListener('touchstart', touchHandler, { passive: false });
   }
 
   show(): void { this.el.classList.add('active'); this.engine.start(); }

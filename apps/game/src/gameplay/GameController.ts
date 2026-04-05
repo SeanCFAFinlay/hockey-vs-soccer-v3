@@ -65,13 +65,35 @@ export class GameController {
   }
 
   private generateWaveCompositions(numWaves: number, enemies: typeof this.state.config.enemies): void {
+    const isHockey = this.state.config.theme === 'hockey';
+    
     for (let w = 1; w <= numWaves; w++) {
       const comp: Record<string, number> = {};
-      comp[enemies[0].id] = 5 + Math.floor(w * 1.3);
-      if (w >= 2) comp[enemies[1]?.id ?? ''] = Math.floor(w * 0.6);
-      if (w >= 3) comp[enemies[2]?.id ?? ''] = Math.floor(w * 0.7);
-      if (w >= 5 && enemies[3]) comp[enemies[3].id] = Math.floor((w - 3) * 0.4);
-      if (w % 5 === 0 && enemies[6]) comp[enemies[6].id] = 1 + Math.floor(w / 12);
+      
+      if (isHockey) {
+        // Hockey: More enemies, faster waves, aggressive rushes
+        comp[enemies[0].id] = 6 + Math.floor(w * 1.5); // More basic pucks
+        if (w >= 2) comp[enemies[1]?.id ?? ''] = Math.floor(w * 0.8); // Skaters
+        if (w >= 3) comp[enemies[2]?.id ?? ''] = Math.floor(w * 0.9); // Speed wingers
+        if (w >= 4 && enemies[3]) comp[enemies[3].id] = Math.floor((w - 2) * 0.5); // Defense
+        if (w >= 5 && enemies[4]) comp[enemies[4].id] = Math.floor((w - 4) * 0.4); // Hot puck
+        if (w >= 6 && enemies[5]) comp[enemies[5].id] = Math.floor((w - 5) * 0.6); // Flying
+        if (w >= 8 && enemies[6]) comp[enemies[6].id] = Math.floor((w - 6) * 0.3); // Enforcer
+        if (w >= 10 && enemies[8]) comp[enemies[8].id] = Math.floor((w - 9) * 0.2); // Goalie
+        if (w % 5 === 0 && enemies[10]) comp[enemies[10].id] = 1 + Math.floor(w / 10); // Boss
+      } else {
+        // Soccer: Fewer but tougher enemies, slower build-up, tactical waves
+        comp[enemies[0].id] = 4 + Math.floor(w * 1.2); // Fewer balls
+        if (w >= 2) comp[enemies[1]?.id ?? ''] = Math.floor(w * 0.7); // Ball runners
+        if (w >= 3) comp[enemies[2]?.id ?? ''] = Math.floor(w * 0.6); // Strikers
+        if (w >= 5 && enemies[3]) comp[enemies[3].id] = Math.floor((w - 3) * 0.5); // Defenders
+        if (w >= 6 && enemies[4]) comp[enemies[4].id] = Math.floor((w - 5) * 0.4); // Fire ball
+        if (w >= 7 && enemies[5]) comp[enemies[5].id] = Math.floor((w - 6) * 0.5); // Flying
+        if (w >= 9 && enemies[6]) comp[enemies[6].id] = Math.floor((w - 7) * 0.3); // Playmaker
+        if (w >= 11 && enemies[8]) comp[enemies[8].id] = Math.floor((w - 10) * 0.2); // Heavy ball
+        if (w % 5 === 0 && enemies[10]) comp[enemies[10].id] = 1 + Math.floor(w / 12); // Boss
+      }
+      
       this.waveCompositions.push(comp);
     }
   }
@@ -133,11 +155,22 @@ export class GameController {
     const shots = this.towers.update(dt, enemyList);
 
     for (const shot of shots) {
+      const towerType = shot.tower.type;
+      const projectileType = towerType.projectile || 'default';
+      
+      // Different speeds based on tower type
+      let speed = 14;
+      if (projectileType === 'puck' || projectileType === 'dart') speed = 18;
+      if (projectileType === 'shard' || projectileType === 'tackle') speed = 12;
+      if (projectileType === 'ball' || projectileType === 'curveBall') speed = 15;
+      
       this.projectiles.fire(
         shot.tower.mesh.position.clone(),
         shot.targetId,
         this.towers.getDamage(shot.tower),
-        shot.tower.type.color,
+        towerType.color,
+        projectileType,
+        speed,
       );
     }
 
